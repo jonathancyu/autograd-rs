@@ -1,6 +1,18 @@
 #[cfg(test)]
 mod tensor_tests {
     use llm_rs::tensor::Tensor;
+
+    #[test]
+    fn indexmut_changes_value() {
+        let mut a = Tensor::of(&[
+            &[1.0, 2.0],
+            &[3.0, 4.0]
+        ]);
+        a[0][0] = 5.0;
+
+        assert_eq!(5.0, a[0][0]);
+    }
+     
     #[test]
     fn index_returns_correct_value() {
         let a = Tensor::of(&[
@@ -70,6 +82,21 @@ mod tensor_tests {
         ]);
 
         assert_eq!(expected, a * b);
+    }
+    
+    #[test]
+    fn pow_gives_correct_value() {
+        let a = Tensor::of(&[
+            &[1.0, 2.0],
+            &[3.0, 4.0]
+        ]);
+        
+        let expected = Tensor::of(&[
+            &[1.0, 4.0],
+            &[9.0, 16.0]
+        ]);
+
+        assert_eq!(expected, a.pow(2 as i32));
     }
 
 }

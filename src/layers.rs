@@ -23,7 +23,7 @@ impl Linear {
     }
 
     pub fn backward(mut self, predicted: &Tensor, y: &Tensor) {
-        for i in 0..y.m {
+        for _i in 0..y.m {
             //let err = predicted[0][i];
         }
     }

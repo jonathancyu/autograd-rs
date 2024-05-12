@@ -1,8 +1,9 @@
 use core::f64;
-use std::ops::{Index, Mul, Add, Sub, Neg};
+use std::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
 use std::fmt::Display;
 
-#[derive(Debug, Clone)]
+
+#[derive(Debug)]
 pub struct Tensor {
     pub data: Vec<Vec<f64>>,
     pub m: usize,
@@ -57,8 +58,33 @@ impl Tensor {
         result
     }
 
+    pub fn pow(self, rhs: i32) -> Tensor {
+        let mut result = self.clone();
+        for i in 0..self.m {
+            for j in 0..self.n {
+                result[i][j] = self[i][j].powi(rhs);
+            }
+        }
+        result
+    }
+
     pub fn size(&self) -> (usize, usize) {
         (self.m, self.n)
+    }
+}
+
+impl Clone for Tensor {
+    fn clone(&self) -> Self {
+        let data = vec![vec![0.0; self.n]; self.m];
+        Tensor { data, m: self.m, n: self.n }
+    }
+}
+
+impl  IndexMut<usize> for Tensor {
+    //type Output = &'a mut Vec<f64>;
+    fn index_mut(& mut self, index: usize) -> & mut Vec<f64> {
+        assert!(index < self.m, "Index out of bounds");
+        &mut self.data[index]
     }
 }
 
@@ -66,7 +92,6 @@ impl Index<usize> for Tensor {
     type Output = Vec<f64>;
     fn index(&self, index: usize) -> &Vec<f64> {
         assert!(index < self.m, "Index out of bounds");
-
         &self.data[index]
     }
 }
@@ -129,7 +154,6 @@ impl Mul<Tensor> for Tensor {
             panic!("Incompatible dimensions")
         }
         let mut data = vec![vec![0.0; p]; n];
-        //println!("{}, {}, {}, {:?}", n, m, p, data);
         for i in 0..n {
             for j in 0..p {
                 for k in 0..m {

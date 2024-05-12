@@ -19,7 +19,7 @@ fn main() {
     let lr = 0.5;
     for epoch in 0..num_epochs {
         for i in 0..1 {//(x.len()) {
-            let prediction = layer.forward(&x[i]);
+            let prediction = &layer.forward(&x[i]);
             let expected = &y[i];
             //let error = prediction - expected;
             //layer.backward(&prediction, expected);
