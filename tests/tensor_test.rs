@@ -1,6 +1,47 @@
 #[cfg(test)]
 mod tensor_tests {
     use llm_rs::tensor::Tensor;
+    #[test]
+    fn index_returns_correct_value() {
+        let a = Tensor::of(&[
+            &[1.0, 2.0],
+            &[3.0, 4.0]
+        ]);
+
+        assert_eq!(1.0, a[0][0]);
+        assert_eq!(2.0, a[0][1]);
+        assert_eq!(3.0, a[1][0]);
+        assert_eq!(4.0, a[1][1]);
+    }
+
+    #[test]
+    fn neg_returns_negative_value() {
+        let a = Tensor::fill(2, 2, 2.0);
+
+        let expected = Tensor::fill(2, 2, -2.0);
+
+        assert_eq!(expected, -a);
+    }
+
+    #[test]
+    fn add_returns_elementwise_sum() {
+        let a = Tensor::fill(2, 2, 2.0);
+        let b = Tensor::fill(2, 2, 1.0);
+
+        let expected = Tensor::fill(2, 2, 3.0);
+
+        assert_eq!(expected, a + b);
+    }
+
+    #[test]
+    fn sub_returns_elementwise_diff() {
+        let a = Tensor::fill(2, 2, 2.0);
+        let b = Tensor::fill(2, 2, 3.0);
+
+        let expected = Tensor::fill(2, 2, -1.0);
+
+        assert_eq!(expected, a - b);
+    }
 
     #[test]
     fn simple_multiplication() {

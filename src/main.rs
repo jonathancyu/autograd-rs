@@ -15,12 +15,15 @@ fn main() {
 
     let (x, y) = get_data();
     let layer = Linear::new(1, 2);
-    let num_epochs = 1;
-    for _epoch in 0..num_epochs {
-        for i in 0..(x.len()) {
+    let num_epochs = 100;
+    let lr = 0.5;
+    for epoch in 0..num_epochs {
+        for i in 0..1 {//(x.len()) {
             let prediction = layer.forward(&x[i]);
             let expected = &y[i];
-            let _error = prediction.data[0][0] - expected.data[0][0];
+            //let error = prediction - expected;
+            //layer.backward(&prediction, expected);
+            //println!("epoch {}, err {}, weights {:?}", epoch, error, layer.weights.data);
         }
     }
 }

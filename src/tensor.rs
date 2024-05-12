@@ -1,4 +1,5 @@
-use std::ops::Mul;
+use core::f64;
+use std::ops::{Index, Mul, Add, Sub, Neg};
 use std::fmt::Display;
 
 #[derive(Debug, Clone)]
@@ -49,9 +50,71 @@ impl Tensor {
             panic!("Expected {} got {}", self.n, x.n);
         }
         let mut result = self.clone(); // TODO: is data the same pointer?
-        result.data.push(x.data[0].clone());
-        result.m += 1;
+        for row in x.data.iter() {
+            result.data.push(row.to_vec());
+            result.m += 1;
+        }
         result
+    }
+
+    pub fn size(&self) -> (usize, usize) {
+        (self.m, self.n)
+    }
+}
+
+impl Index<usize> for Tensor {
+    type Output = Vec<f64>;
+    fn index(&self, index: usize) -> &Vec<f64> {
+        assert!(index < self.m, "Index out of bounds");
+
+        &self.data[index]
+    }
+}
+
+impl Neg for Tensor {
+    type Output = Tensor;
+    fn neg(self) -> Self::Output {
+        let (m, n) = self.size();
+        let mut data = vec![vec![0.0; n]; m];
+        
+        for i in 0..m {
+            for j in 0..n {
+                data[i][j] = -self[i][j];
+            }
+        }
+        Tensor { data, m, n }
+    }
+}
+
+impl Sub<Tensor> for Tensor {
+    type Output = Tensor;
+    fn sub(self, rhs: Tensor) -> Self::Output {
+        let (m, n) = self.size();
+        assert!((m, n) == rhs.size());
+        let mut data = vec![vec![0.0; n]; m];
+        for i in 0..m {
+            for j in 0..n {
+                data[i][j] = self[i][j] - rhs[i][j];
+            }
+        }
+
+        Tensor { data, m, n }
+    }
+}
+
+impl Add<Tensor> for Tensor {
+    type Output = Tensor;
+    fn add(self, rhs: Tensor) -> Self::Output {
+        let (m, n) = self.size();
+        assert!((m, n) == rhs.size());
+        let mut data = vec![vec![0.0; n]; m];
+        for i in 0..m {
+            for j in 0..n {
+                data[i][j] = self[i][j] + rhs[i][j];
+            }
+        }
+
+        Tensor { data, m, n }
     }
 }
 
@@ -70,12 +133,10 @@ impl Mul<Tensor> for Tensor {
         for i in 0..n {
             for j in 0..p {
                 for k in 0..m {
-                    println!("{}, {}, {}, {:?}", i, j, k, data);
-                    data[i][j] += self.data[i][k] * right.data[k][j];
+                    data[i][j] += self[i][k] * right[k][j];
                 }
             }
         }
-        println!("mul {:?}", data);
         Tensor { data, m: n, n: p }
     }
 }
@@ -87,7 +148,7 @@ impl PartialEq for Tensor {
         }
         for i in 0..self.m {
             for j in 0..self.n {
-                if self.data[i][j] != other.data[i][j] {
+                if self[i][j] != other.data[i][j] {
                     return false;
                 }
             }
