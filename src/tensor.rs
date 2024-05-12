@@ -9,12 +9,19 @@ pub struct Tensor {
 }
 
 impl Tensor {
-    pub fn of(data: &Vec<Vec<f64>>) -> Tensor {
-        Tensor { 
-            data: data.to_vec(),
-            m: data.len(),
-            n: data[0].len()
+    #[allow(dead_code)]
+    pub fn of(array: &[&[f64]]) -> Tensor {
+        let m = array.len();
+        let n = array[0].len();
+
+        let mut data = vec![vec![0.0; n]; m];
+        for i in 0..m {
+            for j in 0..n {
+                data[i][j] = array[i][j];
+            }
+
         }
+        Tensor { data, m, n }
     }
 
     pub fn singleton(value: f64) -> Tensor {
@@ -68,15 +75,31 @@ impl Mul<Tensor> for Tensor {
                 }
             }
         }
-        println!("{:?}", data);
+        println!("mul {:?}", data);
         Tensor { data, m: n, n: p }
+    }
+}
+
+impl PartialEq for Tensor {
+    fn eq(&self, other: &Self) -> bool {
+        if self.m != other.m || self.n != other.n {
+            return false;
+        }
+        for i in 0..self.m {
+            for j in 0..self.n {
+                if self.data[i][j] != other.data[i][j] {
+                    return false;
+                }
+            }
+        }
+        true
     }
 }
 
 
 // TODO: impl
 impl Display for Tensor {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Ok(())
     }
 }
