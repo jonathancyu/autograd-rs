@@ -1,6 +1,6 @@
 use core::f64;
 use std::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
-use std::fmt::Display;
+use std::fmt::{format, Display};
 
 
 #[derive(Debug)]
@@ -10,9 +10,9 @@ pub struct Tensor {
     pub n: usize,
 }
 
+    #[allow(dead_code)]
 impl Tensor {
     // Constructors
-    #[allow(dead_code)]
     pub fn of(array: &[&[f64]]) -> Tensor {
         let m = array.len();
         let n = array[0].len();
@@ -88,11 +88,19 @@ impl Tensor {
     }
     
     pub fn transpose(&self) -> Tensor {
-        self.apply(|i, j, data| {
-            data[j][i]
-        })
+        let mut data = vec![vec![0.0; self.m]; self.n];
+
+        // TODO: how to do this with apply?
+        for i in 0..self.n {
+            for j in 0..self.m {
+                data[i][j] = self[j][i];
+            }
+        }
+   
+        Tensor { data, m: self.n, n: self.m }
     }
     pub fn apply(&self, fun: fn(usize, usize, &Tensor) -> f64) -> Tensor {
+        // TODO: make this work for N-dimensional tensors
         let mut data = vec![vec![0.0; self.n]; self.m];
 
         for i in 0..self.m {
@@ -100,7 +108,7 @@ impl Tensor {
                 data[i][j] = fun(i, j, self);
             }
         }
-        println!("x: {:?}", self.data);
+
         Tensor { data, m: self.m, n: self.n }
     }
 
@@ -220,9 +228,19 @@ impl PartialEq for Tensor {
 }
 
 
-// TODO: impl
 impl Display for Tensor {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let result = self.data.iter()
+            .map(|row| {
+                row.iter().map(|&x| {x.to_string()})
+                    .collect::<Vec<String>>()
+                .join(" ")
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+            
+
+        writeln!(f, "{}", result)?;
         Ok(())
     }
 }

@@ -16,12 +16,18 @@ mod tensor_tests {
     #[test]
     fn transpose_flips_data() {
         let a = Tensor::of(&[
-            &[1.0, 2.0],
-            &[3.0, 4.0]
-        ]).transpose();
+            &[1.0, 2.0, 3.0],
+            &[4.0, 5.0, 6.0],
+        ]);
+        let expected = Tensor::of(&[
+            &[1.0, 4.0],
+            &[2.0, 5.0],
+            &[3.0, 6.0]
+        ]);
 
-        assert_eq!(1.0, a[0][0]); assert_eq!(3.0, a[0][1]);
-        assert_eq!(2.0, a[1][0]); assert_eq!(4.0, a[1][1]);
+        let result = a.transpose();
+
+        assert_eq!(expected, result);
     }
 
     #[test]
@@ -118,11 +124,11 @@ mod tensor_tests {
         ]);
         let expected = Tensor::of(&[
             &[2.0, 3.0],
-            &[4.0, 5.0]
+            &[7.0, 5.0]
         ]);
 
         let result = a.apply(|i, j, data| { data[i][j] + 1.0 });
-        println!("{:?}, {:?}", a, result);
+        println!("{:}\n{:}", a, result);
 
         assert_eq!(expected, result);
     }
