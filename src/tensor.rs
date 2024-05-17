@@ -1,6 +1,6 @@
 use core::f64;
 use std::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
-use std::fmt::{format, Display};
+use std::fmt::Display;
 
 
 #[derive(Debug)]
@@ -28,11 +28,7 @@ impl Tensor {
     }
 
     pub fn singleton(value: f64) -> Tensor {
-        Tensor {
-            data: vec![vec![value]],
-            m: 1,
-            n: 1
-        }
+        Tensor::fill(1, 1, value)
     }
 
     pub fn fill(m: usize, n: usize, c: f64) -> Tensor {

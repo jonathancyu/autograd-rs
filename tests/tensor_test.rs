@@ -124,7 +124,7 @@ mod tensor_tests {
         ]);
         let expected = Tensor::of(&[
             &[2.0, 3.0],
-            &[7.0, 5.0]
+            &[4.0, 5.0]
         ]);
 
         let result = a.apply(|i, j, data| { data[i][j] + 1.0 });
