@@ -14,6 +14,17 @@ mod tensor_tests {
     }
      
     #[test]
+    fn transpose_flips_data() {
+        let a = Tensor::of(&[
+            &[1.0, 2.0],
+            &[3.0, 4.0]
+        ]).transpose();
+
+        assert_eq!(1.0, a[0][0]); assert_eq!(3.0, a[0][1]);
+        assert_eq!(2.0, a[1][0]); assert_eq!(4.0, a[1][1]);
+    }
+
+    #[test]
     fn index_returns_correct_value() {
         let a = Tensor::of(&[
             &[1.0, 2.0],
@@ -96,7 +107,24 @@ mod tensor_tests {
             &[9.0, 16.0]
         ]);
 
-        assert_eq!(expected, a.pow(2 as i32));
+        assert_eq!(expected, a.pow(2_i32));
+    }
+
+    #[test]
+    fn apply_applies_function() {
+        let a = Tensor::of(&[
+            &[1.0, 2.0],
+            &[3.0, 4.0]
+        ]);
+        let expected = Tensor::of(&[
+            &[2.0, 3.0],
+            &[4.0, 5.0]
+        ]);
+
+        let result = a.apply(|i, j, data| { data[i][j] + 1.0 });
+        println!("{:?}, {:?}", a, result);
+
+        assert_eq!(expected, result);
     }
 
 }

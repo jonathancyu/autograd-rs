@@ -11,6 +11,7 @@ pub struct Tensor {
 }
 
 impl Tensor {
+    // Constructors
     #[allow(dead_code)]
     pub fn of(array: &[&[f64]]) -> Tensor {
         let m = array.len();
@@ -87,14 +88,22 @@ impl Tensor {
     }
     
     pub fn transpose(&self) -> Tensor {
-        let mut data = vec![vec![0.0; self.m]; self.n];
+        self.apply(|i, j, data| {
+            data[j][i]
+        })
+    }
+    pub fn apply(&self, fun: fn(usize, usize, &Tensor) -> f64) -> Tensor {
+        let mut data = vec![vec![0.0; self.n]; self.m];
+
         for i in 0..self.m {
             for j in 0..self.n {
-                data[j][i] = self[i][j];
+                data[i][j] = fun(i, j, self);
             }
         }
-        Tensor { data, m: self.n, n: self.m }
+        println!("x: {:?}", self.data);
+        Tensor { data, m: self.m, n: self.n }
     }
+
 }
 
 impl Clone for Tensor {
