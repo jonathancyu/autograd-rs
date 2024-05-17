@@ -68,19 +68,48 @@ impl Tensor {
         result
     }
 
+    pub fn sigmoid(self) -> Tensor {
+        let e = 1.0_f64.exp();
+
+        let mut result = self.clone();
+        for i in 0..self.m {
+            for j in 0..self.n {
+                let y = self[i][j];
+                result[i][j] = 1.0 / ( 1.0 + e.powf(y));
+            }
+        }
+
+        result
+    }
+
     pub fn size(&self) -> (usize, usize) {
         (self.m, self.n)
+    }
+    
+    pub fn transpose(&self) -> Tensor {
+        let mut data = vec![vec![0.0; self.m]; self.n];
+        for i in 0..self.m {
+            for j in 0..self.n {
+                data[j][i] = self[i][j];
+            }
+        }
+        Tensor { data, m: self.n, n: self.m }
     }
 }
 
 impl Clone for Tensor {
     fn clone(&self) -> Self {
-        let data = vec![vec![0.0; self.n]; self.m];
+        let mut data = vec![vec![0.0; self.n]; self.m];
+        for i in 0..self.m {
+            for j in 0..self.n {
+                data[i][j] = self[i][j];
+            }
+        }
         Tensor { data, m: self.m, n: self.n }
     }
 }
 
-impl  IndexMut<usize> for Tensor {
+impl IndexMut<usize> for Tensor {
     //type Output = &'a mut Vec<f64>;
     fn index_mut(& mut self, index: usize) -> & mut Vec<f64> {
         assert!(index < self.m, "Index out of bounds");

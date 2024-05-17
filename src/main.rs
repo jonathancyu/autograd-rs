@@ -7,23 +7,32 @@ use tensor::Tensor;
 use layers::Linear;
 
 fn main() {
-    // TODO: 
-    let a = Tensor::fill(2, 2, 2.0);
-    let b = Tensor::fill(2, 3, 1.0);
-    println!("{:?} {:?}", a, b);
-    println!("{:?}", a * b);
-
     let (x, y) = get_data();
-    let layer = Linear::new(1, 2);
-    let num_epochs = 100;
+    let mut layer = Linear::new(1, 1);
+    let num_epochs = 10;
     let lr = 0.5;
+
+    println!("w {:?}", layer.weights.data);
     for epoch in 0..num_epochs {
-        for i in 0..1 {//(x.len()) {
-            let prediction = &layer.forward(&x[i]);
-            let expected = &y[i];
-            //let error = prediction - expected;
+        //for i in 0..(x.len()) {
+        for i in 0..8 {
+            let x_i = &x[i];
+            let y_i = &y[i][0][0];
+
+            let x_pred = layer.forward(x_i)[0][0];
+            let x_sigm = sigmoid(x_pred);
+
+            let d_k = y_i - x_sigm;
+            for i in 0..layer.weights.n {
+                let grad = lr * d_k * x_i[0][0] * derivative_sigmoid(x_pred);
+
+                layer.weights[0][i] += lr * grad;
+            }
+
             //layer.backward(&prediction, expected);
-            //println!("epoch {}, err {}, weights {:?}", epoch, error, layer.weights.data);
+            println!("err {:?}", d_k);
+            println!("w {:?}", layer.weights.data);
+            //println!("epoch {}, pred: {:?}, exp: {:?}, err {:?}, weights {:?}", epoch, prediction, expected,error, layer.weights.data);
         }
     }
 }
@@ -42,3 +51,12 @@ fn get_data() -> (Vec<Tensor>, Vec<Tensor>) {
 
     (x, y)
 }
+fn derivative_sigmoid(val: f64) -> f64 {
+    sigmoid(1.0 - val)
+}
+
+fn sigmoid(y: f64) -> f64{
+    let e = 1.0_f64.exp();
+    1.0 / ( 1.0 + e.powf(y))
+}
+

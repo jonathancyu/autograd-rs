@@ -18,23 +18,16 @@ impl Linear {
         }
         let ones = Tensor::ones(1, x.n);
         let x = x.concat(&ones);
-        let product = self.weights.clone() * x; // TODO: don't want to be cloning..
-        sigmoid(&product)
+
+        self.weights.clone() * x
+        //(self.weights.clone() * x).sigmoid()
     }
 
-    pub fn backward(mut self, predicted: &Tensor, y: &Tensor) {
-        for _i in 0..y.m {
-            //let err = predicted[0][i];
-        }
-    }
 
-    //pub fn 
+
+    //pub fn backward(&mut self, x: &Tensor, : &Tensor, lr: f64) {
+    //
+    //}
 
 }
-
-fn sigmoid(y: &Tensor) -> Tensor {
-    let e = 1.0_f64.exp();
-    Tensor::singleton(1.0 / ( 1.0 + e.powf(y.data[0][0])))
-}
-
 
