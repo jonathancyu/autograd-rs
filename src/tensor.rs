@@ -1,54 +1,54 @@
 use core::f64;
 use std::cell::RefCell;
-use std::ops::{Add, Index, IndexMut, Mul, Neg};
+use std::ops::{Index, IndexMut, Mul};
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
 
-pub struct Tensor<'a> {
+pub struct Tensor {
     data: Vec<Vec<f64>>,
-    pub parents: Vec<Rc<RefCell<&'a Tensor<'a>>>>,
+    pub parents: Vec<Rc<RefCell<Tensor>>>,
     pub grad: Rc<RefCell<f64>>, // TODO: make grad off by default
-    pub backward: Box<dyn Fn(Vec<Tensor<'a>>, f64)>
+    pub backward: Box<dyn Fn(Vec<Tensor>, f64)>
 }
 
-// Operations with Gradient
-impl<'a, 'b> Add<&'b Tensor<'b>> for &'a Tensor<'a> {
-    type Output = Tensor<'a>;
-    fn add(self, rhs: &'b Tensor<'b>) -> Self::Output {
-        let (m, n) = self.size();
-        assert!((m, n) == rhs.size());
-        let mut result = Tensor::fill(m, n, 0.0);
-        for i in 0..m {
-            for j in 0..n {
-                result[i][j] = self[i][j] + rhs[i][j];
-            }
-        }
-        result.set_parents(&vec![*self, *rhs]);
-        result.backward = Box::new(|parents, grad| {
-            assert!(parents.len() == 2);
-            *parents[0].grad.borrow_mut() += grad;
-        });
+//// Operations with Gradient
+//impl<'a, 'b> Add<&'b Tensor<'b>> for &'a Tensor<'a> {
+//    type Output = Tensor<'a>;
+//    fn add(self, rhs: &'b Tensor<'b>) -> Self::Output {
+//        let (m, n) = self.size();
+//        assert!((m, n) == rhs.size());
+//        let mut result = Tensor::fill(m, n, 0.0);
+//        for i in 0..m {
+//            for j in 0..n {
+//                result[i][j] = self[i][j] + rhs[i][j];
+//            }
+//        }
+//        result.set_parents(&vec![*self, *rhs]);
+//        result.backward = Box::new(|parents, grad| {
+//            assert!(parents.len() == 2);
+//            *parents[0].grad.borrow_mut() += grad;
+//        });
+//
+//        result
+//    }
+//}
 
-        result
-    }
-}
-
-impl<'a> Neg for Tensor<'a> {
-    type Output = &'a Tensor<'a>;
-    fn neg(self) -> &'a Tensor<'a>  {
-        let (m, n) = self.size();
-        let result = & mut Tensor::fill(m, n, 0.0);
-        
-        for i in 0..m {
-            for j in 0..n {
-                result[i][j] = -self[i][j];
-            }
-        }
-        result.set_parents(&vec![self]);
-        & result
-    }
-}
+//impl<'a> Neg for Tensor<'a> {
+//    type Output = &'a Tensor<'a>;
+//    fn neg(self) -> &'a Tensor<'a>  {
+//        let (m, n) = self.size();
+//        let result = & mut Tensor::fill(m, n, 0.0);
+//
+//        for i in 0..m {
+//            for j in 0..n {
+//                result[i][j] = -self[i][j];
+//            }
+//        }
+//        result.set_parents(&vec![self]);
+//        & result
+//    }
+//}
 
 
 //impl<'a, 'b> Sub<&'b Tensor<'b>> for &'a Tensor<'a> {
@@ -58,9 +58,9 @@ impl<'a> Neg for Tensor<'a> {
 //    }
 //}
 
-impl<'a> Mul<Tensor<'a>> for Tensor<'a> {
-    type Output = &'a Tensor<'a>;
-    fn mul(self, right: Tensor<'a>) -> &'a Tensor<'a> {
+impl Mul<Tensor> for Tensor {
+    type Output = Tensor;
+    fn mul(self, right: Tensor) -> Tensor {
         let (m, n) = self.size();
         let (n_2, p) = right.size();
  
@@ -68,21 +68,26 @@ impl<'a> Mul<Tensor<'a>> for Tensor<'a> {
         if n != n_2 {
             panic!("Incompatible dimensions")
         }
-        let result = & mut Tensor::fill(m, n, 0.0);
+        let mut data = vec![vec![0.0; n]; m];
 
+        // TODO: loop over (i,j,k) tuples
         for i in 0..m {
             for j in 0..p {
                 for k in 0..n {
-                    result[i][j] += self[i][k] * right[k][j];
+                    data[i][j] += self[i][k] * right[k][j];
                 }
             }
         }
-        result.set_parents(&vec![self, right]);
-        & result
+        Tensor {
+            data,
+            parents: vec![Rc::new(RefCell::new(self)), Rc::new(RefCell::new(right))], // TODO:
+            // cleaner way?
+            ..Tensor::default()
+        }
     }
 }
 
-impl<'a> PartialEq for Tensor<'a> {
+impl PartialEq for Tensor {
     fn eq(&self, other: &Self) -> bool {
         let (m, n) = self.size();
         let (m_2, n_2) = other.size();
@@ -100,17 +105,11 @@ impl<'a> PartialEq for Tensor<'a> {
     }
 }
 
-// Boring stuff
-pub enum TensorInput<'a> {
-    Array(&'a [&'a [f64]]),
-    Vector(Vec<Vec<f64>>),
-    Fill(usize, usize, f64),
-}
 
 fn nop(_: Vec<Tensor>, _: f64) {}
 
-impl<'a> Default for Tensor<'a> {
-    fn default() -> Tensor<'a> {
+impl Default for Tensor {
+    fn default() -> Tensor {
         Tensor {
             data: vec![vec![0.0]],
             grad: Rc::new(RefCell::new(0.0)),
@@ -121,20 +120,8 @@ impl<'a> Default for Tensor<'a> {
 }
 
 #[allow(dead_code)]
-impl<'a> Tensor<'a> {
+impl Tensor {
     // Constructors
-    pub fn new(input: TensorInput) -> Tensor {
-        let data = match input {
-            TensorInput::Array(a) => a.iter()
-                    .map(|&row| row.to_vec())
-                    .collect::<Vec<_>>(),
-            TensorInput::Vector(v) =>  v.clone(),
-            TensorInput::Fill(m, n, value) => vec![vec![value; n]; m]
-
-        };
-
-        Tensor { data, ..Tensor::default()}
-    }
     // TODO:
     //pub fn of<T, U>(&data: T) -> Tensor
     //where
@@ -145,23 +132,39 @@ impl<'a> Tensor<'a> {
     //
     //    Tensor::singleton(0)
     //}
-
-    pub fn of(array: &'a[&'a[f64]]) -> Tensor<'a> {
-        Tensor::new(TensorInput::Array(array))
+    
+    pub fn from_vector(data: Vec<Vec<f64>>) -> Tensor {
+        Tensor {
+            data,
+            ..Tensor::default()
+        }
     }
 
-    pub fn singleton(value: f64) -> Tensor<'a> {
+    pub fn from_array(array: &[&[f64]]) -> Tensor {
+        Tensor {
+            data: array.iter()
+                .map(|&row|
+                    row.to_vec()
+                ).collect::<Vec<_>>(),
+            ..Tensor::default()
+        }
+    }
+
+    pub fn singleton(value: f64) -> Tensor {
         Tensor::fill(1, 1, value)
     }
 
-    pub fn fill(m: usize, n: usize, c: f64) -> Tensor<'a> {
-        Tensor::new(TensorInput::Fill(m, n, c))
+    pub fn fill(m: usize, n: usize, value: f64) -> Tensor {
+        Tensor {
+            data: vec![vec![value; n]; m],
+            ..Tensor::default()
+        }
     }
 
-    pub fn zeros(m: usize, n: usize) -> Tensor<'a> {
+    pub fn zeros(m: usize, n: usize) -> Tensor {
         Tensor::fill(m, n, 0.0)
     }
-    pub fn ones(m: usize, n: usize) -> Tensor<'a> {
+    pub fn ones(m: usize, n: usize) -> Tensor {
         Tensor::fill(m, n, 1.0)
     }
 
@@ -171,11 +174,9 @@ impl<'a> Tensor<'a> {
             _ => panic!("Cannot call item() on a tensor with non-unit size")
         }
     }
-    
-    pub fn set_parents(mut self, parents: &'a Vec<Tensor>) {
-        self.parents = parents.iter()
-            .map(|p| Rc::new(RefCell::new(p)))
-            .collect();
+
+    pub fn set_parents(mut self, parents: Vec<Rc<RefCell<Tensor>>>) {
+        self.parents = parents.clone() // Copy the references to the parent tensor
     }
 
     // Operations
@@ -193,37 +194,37 @@ impl<'a> Tensor<'a> {
     //    result
     //}
 
-    pub fn pow(self, rhs: i32) -> Tensor<'a> {
-        let (m, n) = self.size();
-        let mut result = Tensor::fill(m, n, 0.0);
-        for i in 0..m {
-            for j in 0..n {
-                result[i][j] = self[i][j].powi(rhs);
-            }
-        }
+    //pub fn pow(self, rhs: i32) -> Tensor<'a> {
+    //    let (m, n) = self.size();
+    //    let mut result = Tensor::fill(m, n, 0.0);
+    //    for i in 0..m {
+    //        for j in 0..n {
+    //            result[i][j] = self[i][j].powi(rhs);
+    //        }
+    //    }
+    //
+    //    result.set_parents(&vec![self, Tensor::singleton(rhs as f64)]);
+    //
+    //    //result.backward = Box::new(|grad| 
+    //    //        self.grad = (rhs as f64) * (result.pow(rhs - 1)) * grad
+    //    //    );
+    //    result
+    //}
 
-        result.set_parents(&vec![self, Tensor::singleton(rhs as f64)]);
-
-        //result.backward = Box::new(|grad| 
-        //        self.grad = (rhs as f64) * (result.pow(rhs - 1)) * grad
-        //    );
-        result
-    }
-
-    pub fn sigmoid(self) -> Tensor<'a> {
-        let e = 1.0_f64.exp();
-
-        let mut result = self.clone();
-        let (m, n) = self.size();
-        for i in 0..m {
-            for j in 0..n {
-                let y = self[i][j];
-                result[i][j] = 1.0 / ( 1.0 + e.powf(y));
-            }
-        }
-
-        result
-    }
+    //pub fn sigmoid(self) -> Tensor<'a> {
+    //    let e = 1.0_f64.exp();
+    //
+    //    let mut result = self.clone();
+    //    let (m, n) = self.size();
+    //    for i in 0..m {
+    //        for j in 0..n {
+    //            let y = self[i][j];
+    //            result[i][j] = 1.0 / ( 1.0 + e.powf(y));
+    //        }
+    //    }
+    //
+    //    result
+    //}
 
     pub fn size(&self) -> (usize, usize) {
         match self.data.is_empty() {
@@ -246,7 +247,8 @@ impl<'a> Tensor<'a> {
             }
         }
 
-        Tensor::new(TensorInput::Vector(data))
+
+        Tensor::from_vector(data)
     }
     pub fn apply(&self, fun: fn(usize, usize, &Tensor) -> f64) -> Tensor {
         // TODO: make this work for N-dimensional tensors
@@ -259,11 +261,11 @@ impl<'a> Tensor<'a> {
             }
         }
 
-        Tensor::new(TensorInput::Vector(data))
+        Tensor::from_vector(data)
     }
 }
 
-impl Clone for Tensor<'_> {
+impl Clone for Tensor {
     fn clone(&self) -> Self {
         let (m, n) = self.size();
         let mut data = vec![vec![0.0; n]; m];
@@ -272,11 +274,14 @@ impl Clone for Tensor<'_> {
                 data[i][j] = self[i][j];
             }
         }
-        Tensor::new(TensorInput::Vector(data))
+        Tensor {
+            data,
+            ..Tensor::default()
+        }
     }
 }
 
-impl IndexMut<usize> for Tensor<'_> {
+impl IndexMut<usize> for Tensor {
     //type Output = &'a mut Vec<f64>;
     fn index_mut(& mut self, index: usize) -> & mut Vec<f64> {
         let (m, n) = self.size();
@@ -285,7 +290,7 @@ impl IndexMut<usize> for Tensor<'_> {
     }
 }
 
-impl<'a> Index<usize> for Tensor<'a> {
+impl<'a> Index<usize> for Tensor {
     type Output = Vec<f64>;
     fn index(&self, index: usize) -> &Vec<f64> {
         let (m, n) = self.size();
@@ -295,7 +300,7 @@ impl<'a> Index<usize> for Tensor<'a> {
 }
 
 
-impl Debug for Tensor<'_> {
+impl Debug for Tensor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let result = self.data.iter()
             .map(|row| {
@@ -312,7 +317,7 @@ impl Debug for Tensor<'_> {
     }
 }
 
-impl Display for Tensor<'_> {
+impl Display for Tensor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let result = self.data.iter()
             .map(|row| {
