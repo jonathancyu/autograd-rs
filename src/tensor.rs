@@ -1,6 +1,6 @@
 use core::f64;
 use std::cell::RefCell;
-use std::ops::{Index, IndexMut, Mul};
+use std::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
 use std::fmt::{Debug, Display};
 use std::rc::Rc;
 
@@ -12,51 +12,57 @@ pub struct Tensor {
     pub backward: Box<dyn Fn(Vec<Tensor>, f64)>
 }
 
-//// Operations with Gradient
-//impl<'a, 'b> Add<&'b Tensor<'b>> for &'a Tensor<'a> {
-//    type Output = Tensor<'a>;
-//    fn add(self, rhs: &'b Tensor<'b>) -> Self::Output {
-//        let (m, n) = self.size();
-//        assert!((m, n) == rhs.size());
-//        let mut result = Tensor::fill(m, n, 0.0);
-//        for i in 0..m {
-//            for j in 0..n {
-//                result[i][j] = self[i][j] + rhs[i][j];
-//            }
-//        }
-//        result.set_parents(&vec![*self, *rhs]);
-//        result.backward = Box::new(|parents, grad| {
-//            assert!(parents.len() == 2);
-//            *parents[0].grad.borrow_mut() += grad;
-//        });
-//
-//        result
-//    }
-//}
+// Operations with Gradient
+impl Add<Tensor> for Tensor {
+    type Output = Tensor;
+    fn add(self, right: Tensor) -> Self::Output {
+        let (m, n) = self.size();
+        assert!((m, n) == right.size());
+        let mut data = vec![vec![0.0; n]; m];
+        for i in 0..m {
+            for j in 0..n {
+                data[i][j] = self[i][j] + right[i][j];
+            }
+        }
+        Tensor {
+            data,
+            parents: vec![Rc::new(RefCell::new(self)), Rc::new(RefCell::new(right))], 
+            backward: Box::new(|parents, grad| {
+                assert!(parents.len() == 2);
+                *parents[0].grad.borrow_mut() += grad;
+            }),
+            ..Tensor::default()
+        }
+    }
+}
 
-//impl<'a> Neg for Tensor<'a> {
-//    type Output = &'a Tensor<'a>;
-//    fn neg(self) -> &'a Tensor<'a>  {
-//        let (m, n) = self.size();
-//        let result = & mut Tensor::fill(m, n, 0.0);
-//
-//        for i in 0..m {
-//            for j in 0..n {
-//                result[i][j] = -self[i][j];
-//            }
-//        }
-//        result.set_parents(&vec![self]);
-//        & result
-//    }
-//}
+impl Neg for Tensor {
+    type Output = Tensor;
+    fn neg(self) -> Tensor {
+        let (m, n) = self.size();
+        let mut data = vec![vec![0.0; n]; m];
+
+        for i in 0..m {
+            for j in 0..n {
+                data[i][j] = -self[i][j];
+            }
+        }
+
+        Tensor {
+            data,
+            parents: vec![Rc::new(RefCell::new(self))], 
+            ..Tensor::default()
+        }
+    }
+}
 
 
-//impl<'a, 'b> Sub<&'b Tensor<'b>> for &'a Tensor<'a> {
-//    type Output = Tensor<'a>;
-//    fn sub(self, rhs: &'b Tensor<'b>) -> Self::Output {
-//        self + (-rhs)
-//    }
-//}
+impl Sub<Tensor> for Tensor {
+    type Output = Tensor;
+    fn sub(self, rhs: Tensor) -> Self::Output {
+        self + (-rhs)
+    }
+}
 
 impl Mul<Tensor> for Tensor {
     type Output = Tensor;
@@ -68,7 +74,7 @@ impl Mul<Tensor> for Tensor {
         if n != n_2 {
             panic!("Incompatible dimensions")
         }
-        let mut data = vec![vec![0.0; n]; m];
+        let mut data = vec![vec![0.0; p]; m];
 
         // TODO: loop over (i,j,k) tuples
         for i in 0..m {
@@ -194,22 +200,22 @@ impl Tensor {
     //    result
     //}
 
-    //pub fn pow(self, rhs: i32) -> Tensor<'a> {
-    //    let (m, n) = self.size();
-    //    let mut result = Tensor::fill(m, n, 0.0);
-    //    for i in 0..m {
-    //        for j in 0..n {
-    //            result[i][j] = self[i][j].powi(rhs);
-    //        }
-    //    }
-    //
-    //    result.set_parents(&vec![self, Tensor::singleton(rhs as f64)]);
-    //
-    //    //result.backward = Box::new(|grad| 
-    //    //        self.grad = (rhs as f64) * (result.pow(rhs - 1)) * grad
-    //    //    );
-    //    result
-    //}
+    pub fn pow(self, rhs: i32) -> Tensor {
+        let (m, n) = self.size();
+        let mut data = vec![vec![0.0; n]; m];
+        for i in 0..m {
+            for j in 0..n {
+                data[i][j] = self[i][j].powi(rhs);
+            }
+        }
+
+
+        Tensor {
+            data,
+            parents: vec![Rc::new(RefCell::new(self))], // TODO: add rhs here when convering to
+            ..Tensor::default()
+        }
+    }
 
     //pub fn sigmoid(self) -> Tensor<'a> {
     //    let e = 1.0_f64.exp();
