@@ -1,15 +1,20 @@
 use core::f64;
 use std::cell::RefCell;
-use std::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
 use std::fmt::{Debug, Display};
+use std::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
 use std::rc::Rc;
 
-
 pub struct Tensor {
+    parents: Parents,
     data: Vec<Vec<f64>>,
-    pub parents: Vec<Rc<RefCell<Tensor>>>,
-    pub grad: Rc<RefCell<f64>>, // TODO: make grad off by default
-    pub backward: Box<dyn Fn(Vec<Tensor>, f64)>
+    grad: f64, // TODO: make grad off by default, TODO: should this be a Tensor?
+    grad_fn: Box<dyn Fn(Tensor, Parents)>,
+}
+
+enum Parents {
+    None(),
+    Unary(Rc<RefCell<Tensor>>),
+    Binary(Rc<RefCell<Tensor>>, Rc<RefCell<Tensor>>),
 }
 
 // Operations with Gradient
@@ -26,10 +31,13 @@ impl Add<Tensor> for Tensor {
         }
         Tensor {
             data,
-            parents: vec![Rc::new(RefCell::new(self)), Rc::new(RefCell::new(right))], 
-            backward: Box::new(|parents, grad| {
-                assert!(parents.len() == 2);
-                *parents[0].grad.borrow_mut() += grad;
+            parents: Parents::Binary(Rc::new(RefCell::new(self)), Rc::new(RefCell::new(right))),
+            grad_fn: Box::new(|this, parents| match parents {
+                Parents::Binary(left, right) => {
+                    left.borrow_mut().grad += this.grad;
+                    right.borrow_mut().grad += this.grad;
+                }
+                _ => panic!("Add grad_fn called with invalid args"),
             }),
             ..Tensor::default()
         }
@@ -50,12 +58,11 @@ impl Neg for Tensor {
 
         Tensor {
             data,
-            parents: vec![Rc::new(RefCell::new(self))], 
+            parents: Parents::Unary(Rc::new(RefCell::new(self))),
             ..Tensor::default()
         }
     }
 }
-
 
 impl Sub<Tensor> for Tensor {
     type Output = Tensor;
@@ -69,7 +76,7 @@ impl Mul<Tensor> for Tensor {
     fn mul(self, right: Tensor) -> Tensor {
         let (m, n) = self.size();
         let (n_2, p) = right.size();
- 
+
         // [m x n][n x p] => [m x p]
         if n != n_2 {
             panic!("Incompatible dimensions")
@@ -86,8 +93,7 @@ impl Mul<Tensor> for Tensor {
         }
         Tensor {
             data,
-            parents: vec![Rc::new(RefCell::new(self)), Rc::new(RefCell::new(right))], // TODO:
-            // cleaner way?
+            parents: Parents::Binary(Rc::new(RefCell::new(self)), Rc::new(RefCell::new(right))), // TODO: cleaner way?
             ..Tensor::default()
         }
     }
@@ -111,16 +117,15 @@ impl PartialEq for Tensor {
     }
 }
 
-
-fn nop(_: Vec<Tensor>, _: f64) {}
+fn nop(_this: Tensor, _parents: Parents) {}
 
 impl Default for Tensor {
     fn default() -> Tensor {
         Tensor {
             data: vec![vec![0.0]],
-            grad: Rc::new(RefCell::new(0.0)),
-            parents: vec![],
-            backward: Box::new(nop)
+            grad: 0.0,
+            parents: Parents::None(),
+            grad_fn: Box::new(nop),
         }
     }
 }
@@ -138,7 +143,7 @@ impl Tensor {
     //
     //    Tensor::singleton(0)
     //}
-    
+
     pub fn from_vector(data: Vec<Vec<f64>>) -> Tensor {
         Tensor {
             data,
@@ -148,10 +153,7 @@ impl Tensor {
 
     pub fn from_array(array: &[&[f64]]) -> Tensor {
         Tensor {
-            data: array.iter()
-                .map(|&row|
-                    row.to_vec()
-                ).collect::<Vec<_>>(),
+            data: array.iter().map(|&row| row.to_vec()).collect::<Vec<_>>(),
             ..Tensor::default()
         }
     }
@@ -177,12 +179,8 @@ impl Tensor {
     pub fn item(&self) -> f64 {
         match self.size() {
             (1, 1) => self[0][0],
-            _ => panic!("Cannot call item() on a tensor with non-unit size")
+            _ => panic!("Cannot call item() on a tensor with non-unit size"),
         }
-    }
-
-    pub fn set_parents(mut self, parents: Vec<Rc<RefCell<Tensor>>>) {
-        self.parents = parents.clone() // Copy the references to the parent tensor
     }
 
     // Operations
@@ -209,10 +207,9 @@ impl Tensor {
             }
         }
 
-
         Tensor {
             data,
-            parents: vec![Rc::new(RefCell::new(self))], // TODO: add rhs here when convering to
+            parents: Parents::Unary(Rc::new(RefCell::new(self))), // TODO: add rhs here when convering to
             ..Tensor::default()
         }
     }
@@ -237,22 +234,21 @@ impl Tensor {
             true => (0, 0),
             false => match self.data[0].is_empty() {
                 true => (0, 0),
-                false => (self.data.len(), self.data[0].len())
-            }
+                false => (self.data.len(), self.data[0].len()),
+            },
         }
     }
-    
+
     pub fn transpose(&self) -> Tensor {
         let (m, n) = self.size();
         let mut data = vec![vec![0.0; m]; n];
 
         // TODO: how to do this with apply?
-        for i in 0..n {
-            for j in 0..m {
+        (0..n).for_each(|i| {
+            (0..m).for_each(|j| {
                 data[i][j] = self[j][i];
-            }
-        }
-
+            });
+        });
 
         Tensor::from_vector(data)
     }
@@ -261,11 +257,11 @@ impl Tensor {
         let (m, n) = self.size();
         let mut data = vec![vec![0.0; n]; m];
 
-        for i in 0..m {
-            for j in 0..n {
+        (0..m).for_each(|i| {
+            (0..n).for_each(|j| {
                 data[i][j] = fun(i, j, self);
-            }
-        }
+            });
+        });
 
         Tensor::from_vector(data)
     }
@@ -289,34 +285,35 @@ impl Clone for Tensor {
 
 impl IndexMut<usize> for Tensor {
     //type Output = &'a mut Vec<f64>;
-    fn index_mut(& mut self, index: usize) -> & mut Vec<f64> {
-        let (m, n) = self.size();
+    fn index_mut(&mut self, index: usize) -> &mut Vec<f64> {
+        let (m, _n) = self.size();
         assert!(index < m, "Index out of bounds");
         &mut self.data[index]
     }
 }
 
-impl<'a> Index<usize> for Tensor {
+impl Index<usize> for Tensor {
     type Output = Vec<f64>;
     fn index(&self, index: usize) -> &Vec<f64> {
-        let (m, n) = self.size();
+        let (m, _n) = self.size();
         assert!(index < m, "Index out of bounds");
         &self.data[index]
     }
 }
 
-
 impl Debug for Tensor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let result = self.data.iter()
+        let result = self
+            .data
+            .iter()
             .map(|row| {
-                row.iter().map(|&x| {x.to_string()})
+                row.iter()
+                    .map(|&x| x.to_string())
                     .collect::<Vec<String>>()
-                .join(" ")
+                    .join(" ")
             })
             .collect::<Vec<String>>()
             .join("\n");
-            
 
         writeln!(f, "{}", result)?;
         Ok(())
@@ -325,15 +322,17 @@ impl Debug for Tensor {
 
 impl Display for Tensor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let result = self.data.iter()
+        let result = self
+            .data
+            .iter()
             .map(|row| {
-                row.iter().map(|&x| {x.to_string()})
+                row.iter()
+                    .map(|&x| x.to_string())
                     .collect::<Vec<String>>()
-                .join(" ")
+                    .join(" ")
             })
             .collect::<Vec<String>>()
             .join("\n");
-            
 
         writeln!(f, "{}", result)?;
         Ok(())
