@@ -49,7 +49,7 @@ mod tensor_tests {
 
         let expected = Tensor::fill(2, 2, -2.0);
 
-        assert_eq!(expected, -a);
+        assert_eq!(expected, -&a);
     }
 
     #[test]
@@ -59,7 +59,7 @@ mod tensor_tests {
 
         let expected = Tensor::fill(2, 2, 3.0);
 
-        assert_eq!(expected, a + b);
+        assert_eq!(expected, &a + b);
     }
 
     #[test]
@@ -69,7 +69,7 @@ mod tensor_tests {
 
         let expected = Tensor::fill(2, 2, -1.0);
 
-        assert_eq!(expected, a - b);
+        assert_eq!(expected, &a - b);
     }
 
     #[test]
@@ -79,7 +79,7 @@ mod tensor_tests {
 
         let expected = Tensor::fill(2, 3, 4.0);
 
-        assert_eq!(expected, a * b);
+        assert_eq!(expected, &a * b);
     }
 
     #[test]
@@ -98,7 +98,7 @@ mod tensor_tests {
             &[19.0, 26.0, 33.0]
         ]);
 
-        assert_eq!(expected, a * b);
+        assert_eq!(expected, &a * b);
     }
     
     #[test]

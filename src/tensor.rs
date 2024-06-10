@@ -5,20 +5,23 @@ use std::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
 use std::rc::Rc;
 
 pub struct Tensor {
-    parents: Parents,
     data: Vec<Vec<f64>>,
-    grad: f64, // TODO: make grad off by default, TODO: should this be a Tensor?
-    grad_fn: Box<dyn Fn(Tensor, Parents)>,
+    pub grad: Rc<RefCell<f64>>, // TODO: make grad off by default, TODO: should this be a Tensor?
+    grad_fn: Box<dyn Fn(f64)>,
 }
 
-enum Parents {
-    None(),
-    Unary(Rc<RefCell<Tensor>>),
-    Binary(Rc<RefCell<Tensor>>, Rc<RefCell<Tensor>>),
+pub trait Backward {
+    fn backward(self, grad: f64);
+}
+
+impl Backward for Tensor {
+    fn backward(self, grad: f64) {
+        (self.grad_fn)(grad)
+    }
 }
 
 // Operations with Gradient
-impl Add<Tensor> for Tensor {
+impl<'a> Add<Tensor> for &'a Tensor {
     type Output = Tensor;
     fn add(self, right: Tensor) -> Self::Output {
         let (m, n) = self.size();
@@ -29,22 +32,22 @@ impl Add<Tensor> for Tensor {
                 data[i][j] = self[i][j] + right[i][j];
             }
         }
+
+        let left = self.grad.clone();
+        let right = right.grad.clone();
+
         Tensor {
             data,
-            parents: Parents::Binary(Rc::new(RefCell::new(self)), Rc::new(RefCell::new(right))),
-            grad_fn: Box::new(|this, parents| match parents {
-                Parents::Binary(left, right) => {
-                    left.borrow_mut().grad += this.grad;
-                    right.borrow_mut().grad += this.grad;
-                }
-                _ => panic!("Add grad_fn called with invalid args"),
+            grad_fn: Box::new(move |grad: f64| {
+                *left.borrow_mut() += grad;
+                *right.borrow_mut() += grad;
             }),
             ..Tensor::default()
         }
     }
 }
 
-impl Neg for Tensor {
+impl<'a> Neg for &'a Tensor {
     type Output = Tensor;
     fn neg(self) -> Tensor {
         let (m, n) = self.size();
@@ -58,20 +61,19 @@ impl Neg for Tensor {
 
         Tensor {
             data,
-            parents: Parents::Unary(Rc::new(RefCell::new(self))),
             ..Tensor::default()
         }
     }
 }
 
-impl Sub<Tensor> for Tensor {
+impl<'a> Sub<Tensor> for &'a Tensor {
     type Output = Tensor;
     fn sub(self, rhs: Tensor) -> Self::Output {
-        self + (-rhs)
+        self + -(&rhs)
     }
 }
 
-impl Mul<Tensor> for Tensor {
+impl<'a> Mul<Tensor> for &'a Tensor {
     type Output = Tensor;
     fn mul(self, right: Tensor) -> Tensor {
         let (m, n) = self.size();
@@ -93,7 +95,6 @@ impl Mul<Tensor> for Tensor {
         }
         Tensor {
             data,
-            parents: Parents::Binary(Rc::new(RefCell::new(self)), Rc::new(RefCell::new(right))), // TODO: cleaner way?
             ..Tensor::default()
         }
     }
@@ -117,14 +118,13 @@ impl PartialEq for Tensor {
     }
 }
 
-fn nop(_this: Tensor, _parents: Parents) {}
+fn nop(_grad: f64) {}
 
 impl Default for Tensor {
     fn default() -> Tensor {
         Tensor {
             data: vec![vec![0.0]],
-            grad: 0.0,
-            parents: Parents::None(),
+            grad: Rc::new(RefCell::new(0.0)),
             grad_fn: Box::new(nop),
         }
     }
@@ -132,18 +132,6 @@ impl Default for Tensor {
 
 #[allow(dead_code)]
 impl Tensor {
-    // Constructors
-    // TODO:
-    //pub fn of<T, U>(&data: T) -> Tensor
-    //where
-    //    T: Iterator + Index<usize, Output = U>,
-    //    U: Iterator + Index<usize, Output = f64>
-    //{
-    //    let (m, n) = (data.count(), data);
-    //
-    //    Tensor::singleton(0)
-    //}
-
     pub fn from_vector(data: Vec<Vec<f64>>) -> Tensor {
         Tensor {
             data,
@@ -184,19 +172,19 @@ impl Tensor {
     }
 
     // Operations
-    //pub fn concat(&self, x: &Tensor) -> Tensor {
-    //    let (m, _) = self.size();
-    //    let (x_m, _) = x.size();
-    //    if x_m != m {
-    //        panic!("Expected {} got {}", m, x_m);
-    //    }
-    //
-    //    let mut result = self.clone(); // TODO: is data the same pointer?
-    //    for row in x.data.iter() {
-    //        result.data.push(row.to_vec());
-    //    }
-    //    result
-    //}
+    pub fn concat(&self, x: &Tensor) -> Tensor {
+        let (m, _) = self.size();
+        let (x_m, _) = x.size();
+        if x_m != m {
+            panic!("Expected {} got {}", m, x_m);
+        }
+
+        let mut result = self.clone(); // TODO: is data the same pointer?
+        for row in x.data.iter() {
+            result.data.push(row.to_vec());
+        }
+        result
+    }
 
     pub fn pow(self, rhs: i32) -> Tensor {
         let (m, n) = self.size();
@@ -209,25 +197,9 @@ impl Tensor {
 
         Tensor {
             data,
-            parents: Parents::Unary(Rc::new(RefCell::new(self))), // TODO: add rhs here when convering to
             ..Tensor::default()
         }
     }
-
-    //pub fn sigmoid(self) -> Tensor<'a> {
-    //    let e = 1.0_f64.exp();
-    //
-    //    let mut result = self.clone();
-    //    let (m, n) = self.size();
-    //    for i in 0..m {
-    //        for j in 0..n {
-    //            let y = self[i][j];
-    //            result[i][j] = 1.0 / ( 1.0 + e.powf(y));
-    //        }
-    //    }
-    //
-    //    result
-    //}
 
     pub fn size(&self) -> (usize, usize) {
         match self.data.is_empty() {
@@ -252,6 +224,7 @@ impl Tensor {
 
         Tensor::from_vector(data)
     }
+
     pub fn apply(&self, fun: fn(usize, usize, &Tensor) -> f64) -> Tensor {
         // TODO: make this work for N-dimensional tensors
         let (m, n) = self.size();
