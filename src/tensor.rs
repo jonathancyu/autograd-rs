@@ -8,6 +8,13 @@ pub struct Tensor {
     data: Vec<Vec<f64>>,
     pub grad: Rc<RefCell<f64>>, // TODO: make grad off by default, TODO: should this be a Tensor?
     grad_fn: Box<dyn Fn(f64)>,
+    operation: Rc<RefCell<Operation>>
+}
+
+pub enum Operation {
+    None,
+    Unary(Rc<RefCell<Tensor>>),
+    Binary(Rc<RefCell<Tensor>>, Rc<RefCell<Tensor>>)
 }
 
 pub trait Backward {
@@ -20,33 +27,7 @@ impl Backward for Tensor {
     }
 }
 
-// Operations with Gradient
-impl<'a> Add<Tensor> for &'a Tensor {
-    type Output = Tensor;
-    fn add(self, right: Tensor) -> Self::Output {
-        let (m, n) = self.size();
-        assert!((m, n) == right.size());
-        let mut data = vec![vec![0.0; n]; m];
-        for i in 0..m {
-            for j in 0..n {
-                data[i][j] = self[i][j] + right[i][j];
-            }
-        }
-
-        let left = self.grad.clone();
-        let right = right.grad.clone();
-
-        Tensor {
-            data,
-            grad_fn: Box::new(move |grad: f64| {
-                *left.borrow_mut() += grad;
-                *right.borrow_mut() += grad;
-            }),
-            ..Tensor::default()
-        }
-    }
-}
-
+// Unary operations
 impl<'a> Neg for &'a Tensor {
     type Output = Tensor;
     fn neg(self) -> Tensor {
@@ -66,16 +47,46 @@ impl<'a> Neg for &'a Tensor {
     }
 }
 
-impl<'a> Sub<Tensor> for &'a Tensor {
+// Binary operations
+impl<'a> Add<&'a Tensor> for &'a Tensor {
     type Output = Tensor;
-    fn sub(self, rhs: Tensor) -> Self::Output {
-        self + -(&rhs)
+    fn add(self, right: &'a Tensor) -> Self::Output {
+        let (m, n) = self.size();
+        assert!((m, n) == right.size());
+        let mut data = vec![vec![0.0; n]; m];
+        for i in 0..m {
+            for j in 0..n {
+                data[i][j] = self[i][j] + right[i][j];
+            }
+        }
+
+        let left = self.grad.clone();
+        let right = right.grad.clone();
+        Tensor {
+            data,
+            grad_fn: Box::new(move |grad: f64| {
+                // y = a + b
+                // dy/da = 1
+                // dy/db = 1
+                *left.borrow_mut() += grad;
+                *right.borrow_mut() += grad;
+            }),
+            ..Tensor::default()
+        }
     }
 }
 
-impl<'a> Mul<Tensor> for &'a Tensor {
+
+impl<'a> Sub<&'a Tensor> for &'a Tensor {
     type Output = Tensor;
-    fn mul(self, right: Tensor) -> Tensor {
+    fn sub(self, rhs: &'a Tensor) -> Self::Output {
+        self + &(-rhs)
+    }
+}
+
+impl<'a> Mul<&'a Tensor> for &'a Tensor {
+    type Output = Tensor;
+    fn mul(self, right: &'a Tensor) -> Tensor {
         let (m, n) = self.size();
         let (n_2, p) = right.size();
 
@@ -118,6 +129,7 @@ impl PartialEq for Tensor {
     }
 }
 
+// Housekeeping
 fn nop(_grad: f64) {}
 
 impl Default for Tensor {
@@ -126,6 +138,7 @@ impl Default for Tensor {
             data: vec![vec![0.0]],
             grad: Rc::new(RefCell::new(0.0)),
             grad_fn: Box::new(nop),
+            operation: Rc::new(RefCell::new(Operation::None))
         }
     }
 }
@@ -309,5 +322,14 @@ impl Display for Tensor {
 
         writeln!(f, "{}", result)?;
         Ok(())
+    }
+}
+trait ToGraphviz {
+    fn to_dot() -> String;
+}
+
+impl ToGraphviz for Tensor {
+    fn to_dot() -> String {
+        "".to_string()
     }
 }
