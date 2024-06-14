@@ -5,9 +5,9 @@ use std::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
 use std::rc::Rc;
 
 pub struct TensorMetadata {
-    name: Option<String>,
-    grad: f64, // TODO: make grad off by default, TODO: should this be a Tensor?
-    grad_fn: Box<dyn Fn(f64)>,
+    pub name: Option<String>,
+    pub grad: f64, // TODO: make grad off by default, TODO: should this be a Tensor?
+    pub grad_fn: Box<dyn Fn(f64)>,
 }
 impl TensorMetadata {
     fn wrap(self) -> Rc<RefCell<TensorMetadata>> {
@@ -25,7 +25,6 @@ impl TensorMetadata {
 
 pub struct Tensor {
     data: Vec<Vec<f64>>,
-    name: Option<String>,
     metadata: Rc<RefCell<TensorMetadata>>,
 }
 
@@ -33,8 +32,8 @@ pub trait Backward {
     fn backward(self);
 }
 
-impl Backward for Tensor {
-    fn backward(mut self) {
+impl Backward for &Tensor {
+    fn backward(self) {
         // println!("{}: {}", self.name.unwrap_or(""))
         let binding = self.metadata();
         let metadata = binding.borrow();
@@ -170,7 +169,6 @@ impl Default for Tensor {
         Tensor {
             data: vec![vec![0.0]],
             metadata: TensorMetadata::default().wrap(),
-            name: None,
         }
     }
 }
@@ -178,12 +176,21 @@ impl Default for Tensor {
 // TODO: clean up this dumping ground
 #[allow(dead_code)]
 impl Tensor {
+    pub fn set_grad(&mut self, grad: f64) -> &mut Self {
+        // TODO: there must be a better way.. there must be
+        let binding = self.metadata();
+        let mut metadata = binding.borrow_mut();
+        metadata.grad = grad;
+        self
+    }
     pub fn named(&mut self, name: String) -> &mut Self {
-        self.name = Some(name);
+        let binding = self.metadata();
+        let mut metadata = binding.borrow_mut();
+        metadata.name = Some(name);
         self
     }
 
-    fn metadata(&mut self) -> Rc<RefCell<TensorMetadata>> {
+    pub fn metadata(&self) -> Rc<RefCell<TensorMetadata>> {
         self.metadata.clone()
     }
 
@@ -226,10 +233,10 @@ impl Tensor {
         }
     }
 
-    pub fn grad(&mut self) -> f64 {
-        let metadata = &self.metadata();
-        let borrow = metadata.borrow_mut();
-        (borrow).grad
+    pub fn grad(&self) -> f64 {
+        let binding = self.metadata();
+        let metadata = binding.borrow();
+        metadata.grad
     }
 
     // Operations

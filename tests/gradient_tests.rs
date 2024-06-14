@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod gradient_tests {
-
     use llm_rs::tensor::{Backward, Tensor};
 
     #[test]
@@ -17,15 +16,25 @@ mod gradient_tests {
 
         let y = &f * &d;
 
+        // Assert correct value
         assert_eq!(2.0, e.item());
         assert_eq!(12.0, d.item());
         assert_eq!(-24.0, y.item());
-        *y.grad.borrow_mut() = 1.0;
+
+        // Propogate gradient
+        {
+            // DANGER: putting this in the same scope as y.backward causes a runtime "already
+            // mutably borrowed" error
+            let binding = y.metadata();
+            let mut metadata = binding.borrow_mut();
+            metadata.grad = 1.0;
+        }
         y.backward();
 
+        // Assert correct gradient
         assert_eq!(1.0, y.grad());
-        assert_eq!(&f.item(), &d.grad());
-        assert_eq!(&d.item(), &f.grad());
+        assert_eq!(f.item(), d.grad());
+        assert_eq!(d.item(), f.grad());
 
 
         // *e.grad.borrow_mut() = 1.0;
