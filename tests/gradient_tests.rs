@@ -22,13 +22,7 @@ mod gradient_tests {
         assert_eq!(-24.0, y.item());
 
         // Propogate gradient
-        {
-            // DANGER: putting this in the same scope as y.backward causes a runtime "already
-            // mutably borrowed" error
-            let binding = y.metadata();
-            let mut metadata = binding.borrow_mut();
-            metadata.grad = 1.0;
-        }
+        y.set_grad(1.0);
         y.backward();
 
         // Assert correct gradient

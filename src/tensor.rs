@@ -176,13 +176,13 @@ impl Default for Tensor {
 // TODO: clean up this dumping ground
 #[allow(dead_code)]
 impl Tensor {
-    pub fn set_grad(&mut self, grad: f64) -> &mut Self {
+    pub fn set_grad(&self, grad: f64) {
         // TODO: there must be a better way.. there must be
         let binding = self.metadata();
         let mut metadata = binding.borrow_mut();
         metadata.grad = grad;
-        self
     }
+
     pub fn named(&mut self, name: String) -> &mut Self {
         let binding = self.metadata();
         let mut metadata = binding.borrow_mut();
