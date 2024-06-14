@@ -5,7 +5,7 @@ use std::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
 use std::rc::Rc;
 
 pub struct TensorMetadata {
-    pub name: Option<String>,
+    pub name: String,
     pub grad: f64, // TODO: make grad off by default, TODO: should this be a Tensor?
     pub grad_fn: Box<dyn Fn(f64)>,
 }
@@ -16,7 +16,7 @@ impl TensorMetadata {
 
     fn default() -> TensorMetadata {
         TensorMetadata {
-            name: None,
+            name: String::new(),
             grad: 0.0,
             grad_fn: Box::new(nop),
         }
@@ -34,10 +34,11 @@ pub trait Backward {
 
 impl Backward for &Tensor {
     fn backward(self) {
-        // println!("{}: {}", self.name.unwrap_or(""))
         let binding = self.metadata();
         let metadata = binding.borrow();
-        (metadata.grad_fn)(self.grad())
+        println!("{}: {}", metadata.name, metadata.grad);
+
+        (metadata.grad_fn)(metadata.grad)
     }
 }
 
@@ -54,9 +55,19 @@ impl<'a> Neg for &'a Tensor {
             }
         }
 
+        let name = self.name();
+        let metadata = self.metadata.clone();
         Tensor {
             data,
-            ..Tensor::default()
+            metadata: TensorMetadata {
+                name,
+                grad_fn: Box::new(move |grad: f64| {
+                    // y = -a
+                    // dL/da = (dL/dy)(dy/da) = grad * -1
+                    metadata.borrow_mut().grad -= grad;
+                }),
+                ..TensorMetadata::default()
+            }.wrap(),
         }
     }
 }
@@ -74,21 +85,23 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
             }
         }
 
+        let name = format!("({} + {})", self.name(), right.name());
+
         let left = self.metadata.clone();
         let right = right.metadata.clone();
         Tensor {
             data,
             metadata: TensorMetadata {
+                name,
                 grad_fn: Box::new(move |grad: f64| {
                     // y = a + b
                     // dL/da = (dL/dy)(dy/da) = grad * 1
                     // dL/db = (dL/dy)(dy/db) = grad * 1
-                    (*left.borrow_mut()).grad += grad;
-                    (*right.borrow_mut()).grad += grad;
+                    left.borrow_mut().grad += grad;
+                    right.borrow_mut().grad += grad;
                 }),
                 ..TensorMetadata::default()
             }.wrap(),
-            ..Tensor::default()
         }
     }
 }
@@ -96,8 +109,9 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
 
 impl<'a> Sub<&'a Tensor> for &'a Tensor {
     type Output = Tensor;
-    fn sub(self, rhs: &'a Tensor) -> Self::Output {
-        self + &(-rhs)
+    fn sub(self, right: &'a Tensor) -> Self::Output {
+        let name = format!("({} - {})", self.name(), right.name());
+        (self + &(-right)).named(name)
     }
 }
 
@@ -121,6 +135,7 @@ impl<'a> Mul<&'a Tensor> for &'a Tensor {
                 }
             }
         }
+        let name = format!("({} * {})", self.name(), right.name());
 
         let left = self.metadata.clone();
         let right = right.metadata.clone();
@@ -128,16 +143,16 @@ impl<'a> Mul<&'a Tensor> for &'a Tensor {
         Tensor {
             data,
             metadata: TensorMetadata {
+                name,
                 grad_fn: Box::new(move |grad: f64| {
                     // y = a + b
                     // dL/da = (dL/dy)(dy/da) = grad * 1
                     // dL/db = (dL/dy)(dy/db) = grad * 1
-                    (*left.borrow_mut()).grad += grad;
-                    (*right.borrow_mut()).grad += grad;
+                    left.borrow_mut().grad += grad;
+                    right.borrow_mut().grad += grad;
                 }),
                 ..TensorMetadata::default()
             }.wrap(),
-            ..Tensor::default()
         }
 
     }
@@ -183,11 +198,17 @@ impl Tensor {
         metadata.grad = grad;
     }
 
-    pub fn named(&mut self, name: String) -> &mut Self {
+    pub fn named(self, name: String) -> Self {
         let binding = self.metadata();
         let mut metadata = binding.borrow_mut();
-        metadata.name = Some(name);
+        metadata.name = name;
         self
+    }
+
+    pub fn name(&self) -> String {
+        let binding = self.metadata();
+        let metadata = binding.borrow();
+        metadata.name.clone()
     }
 
     pub fn metadata(&self) -> Rc<RefCell<TensorMetadata>> {
