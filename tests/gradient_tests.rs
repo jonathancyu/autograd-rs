@@ -20,7 +20,12 @@ mod gradient_tests {
         assert_eq!(2.0, e.item());
         assert_eq!(12.0, d.item());
         assert_eq!(-24.0, y.item());
-        y.backward(1.0);
+        *y.grad.borrow_mut() = 1.0;
+        y.backward();
+
+        assert_eq!(1.0, y.grad());
+        assert_eq!(&f.item(), &d.grad());
+        assert_eq!(&d.item(), &f.grad());
 
 
         // *e.grad.borrow_mut() = 1.0;

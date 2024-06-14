@@ -4,26 +4,41 @@ use std::fmt::{Debug, Display};
 use std::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
 use std::rc::Rc;
 
-pub struct Tensor {
-    data: Vec<Vec<f64>>,
-    pub grad: Rc<RefCell<f64>>, // TODO: make grad off by default, TODO: should this be a Tensor?
+pub struct TensorMetadata {
+    name: Option<String>,
+    grad: f64, // TODO: make grad off by default, TODO: should this be a Tensor?
     grad_fn: Box<dyn Fn(f64)>,
-    operation: Rc<RefCell<Operation>>
+}
+impl TensorMetadata {
+    fn wrap(self) -> Rc<RefCell<TensorMetadata>> {
+        Rc::new(RefCell::new(self))
+    }
+
+    fn default() -> TensorMetadata {
+        TensorMetadata {
+            name: None,
+            grad: 0.0,
+            grad_fn: Box::new(nop),
+        }
+    }
 }
 
-pub enum Operation {
-    None,
-    Unary(Rc<RefCell<Tensor>>),
-    Binary(Rc<RefCell<Tensor>>, Rc<RefCell<Tensor>>)
+pub struct Tensor {
+    data: Vec<Vec<f64>>,
+    name: Option<String>,
+    metadata: Rc<RefCell<TensorMetadata>>,
 }
 
 pub trait Backward {
-    fn backward(self, grad: f64);
+    fn backward(self);
 }
 
 impl Backward for Tensor {
-    fn backward(self, grad: f64) {
-        (self.grad_fn)(grad)
+    fn backward(mut self) {
+        // println!("{}: {}", self.name.unwrap_or(""))
+        let binding = self.metadata();
+        let metadata = binding.borrow();
+        (metadata.grad_fn)(self.grad())
     }
 }
 
@@ -60,17 +75,20 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
             }
         }
 
-        let left = self.grad.clone();
-        let right = right.grad.clone();
+        let left = self.metadata.clone();
+        let right = right.metadata.clone();
         Tensor {
             data,
-            grad_fn: Box::new(move |grad: f64| {
-                // y = a + b
-                // dy/da = 1
-                // dy/db = 1
-                *left.borrow_mut() += grad;
-                *right.borrow_mut() += grad;
-            }),
+            metadata: TensorMetadata {
+                grad_fn: Box::new(move |grad: f64| {
+                    // y = a + b
+                    // dL/da = (dL/dy)(dy/da) = grad * 1
+                    // dL/db = (dL/dy)(dy/db) = grad * 1
+                    (*left.borrow_mut()).grad += grad;
+                    (*right.borrow_mut()).grad += grad;
+                }),
+                ..TensorMetadata::default()
+            }.wrap(),
             ..Tensor::default()
         }
     }
@@ -104,10 +122,25 @@ impl<'a> Mul<&'a Tensor> for &'a Tensor {
                 }
             }
         }
+
+        let left = self.metadata.clone();
+        let right = right.metadata.clone();
+
         Tensor {
             data,
+            metadata: TensorMetadata {
+                grad_fn: Box::new(move |grad: f64| {
+                    // y = a + b
+                    // dL/da = (dL/dy)(dy/da) = grad * 1
+                    // dL/db = (dL/dy)(dy/db) = grad * 1
+                    (*left.borrow_mut()).grad += grad;
+                    (*right.borrow_mut()).grad += grad;
+                }),
+                ..TensorMetadata::default()
+            }.wrap(),
             ..Tensor::default()
         }
+
     }
 }
 
@@ -136,15 +169,24 @@ impl Default for Tensor {
     fn default() -> Tensor {
         Tensor {
             data: vec![vec![0.0]],
-            grad: Rc::new(RefCell::new(0.0)),
-            grad_fn: Box::new(nop),
-            operation: Rc::new(RefCell::new(Operation::None))
+            metadata: TensorMetadata::default().wrap(),
+            name: None,
         }
     }
 }
 
+// TODO: clean up this dumping ground
 #[allow(dead_code)]
 impl Tensor {
+    pub fn named(&mut self, name: String) -> &mut Self {
+        self.name = Some(name);
+        self
+    }
+
+    fn metadata(&mut self) -> Rc<RefCell<TensorMetadata>> {
+        self.metadata.clone()
+    }
+
     pub fn from_vector(data: Vec<Vec<f64>>) -> Tensor {
         Tensor {
             data,
@@ -182,6 +224,12 @@ impl Tensor {
             (1, 1) => self[0][0],
             _ => panic!("Cannot call item() on a tensor with non-unit size"),
         }
+    }
+
+    pub fn grad(&mut self) -> f64 {
+        let metadata = &self.metadata();
+        let borrow = metadata.borrow_mut();
+        (borrow).grad
     }
 
     // Operations
