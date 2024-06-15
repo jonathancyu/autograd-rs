@@ -28,9 +28,10 @@ pub trait GradientNode {
 
 impl GradientNode for TensorData {
     fn grad(&self) -> Tensor {
-        self.grad.clone().unwrap_or_else(|| {
-            panic!("Gradient is not enabled on '{}'", self.name)
-        })
+        match &self.grad {
+            Some(grad) => grad.clone(),
+            None => panic!("Gradient is not enabled on '{}'", self.name),
+        }
     }
 
     fn backward(&self) {
@@ -106,7 +107,7 @@ impl<'a> Neg for &'a Tensor {
                 name,
                 last: Some(self.clone()),
                 operation: GradientOperation::Neg(metadata.clone()),
-                ..TensorData::default()
+                grad: Some(Tensor::fill(m, n, 0.0)),
             }.wrap(),
         }
     }
@@ -160,7 +161,7 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
                 name: format!("({} + {})", self.name(), right.name()),
                 operation: GradientOperation::Add(a.clone(), b.clone()),
                 last: Some(self.clone()),
-                ..TensorData::default()
+                grad: Some(Tensor::fill(m, n, 0.0)),
             }.wrap(),
         }
     }
@@ -188,7 +189,7 @@ impl<'a> Sub<&'a Tensor> for &'a Tensor {
                 name: format!("({} - {})", self.name(), right.name()),
                 operation: GradientOperation::Add(a.clone(), b.clone()),
                 last: Some(self.clone()),
-                ..TensorData::default()
+                grad: Some(Tensor::fill(m, n, 0.0)),
             }.wrap(),
         }
     }
@@ -220,6 +221,7 @@ impl<'a> Mul<&'a Tensor> for &'a Tensor {
             metadata: TensorData {
                 name: format!("({} * {})", self.name(), right.name()),
                 last: Some(self.clone()),
+                grad: Some(Tensor::fill(m, p, 0.0)),
                 ..TensorData::default()
             }.wrap(),
         }

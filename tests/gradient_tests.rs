@@ -7,12 +7,12 @@ mod gradient_tests {
         // y = f * ((a * b) + c)
         //   = f * (e + c)
         //   = f * d
-        let a = Tensor::singleton(1.0).named("a".to_string());
-        let b = Tensor::singleton(2.0).named("b".to_string());
+        let a = Tensor::singleton(1.0).named("a".to_string()).with_grad();
+        let b = Tensor::singleton(2.0).named("b".to_string()).with_grad();
         let e = &a * &b;
-        let c = Tensor::singleton(10.0).named("c".to_string());
+        let c = Tensor::singleton(10.0).named("c".to_string()).with_grad();
         let d = &e + &c;
-        let f = Tensor::singleton(-2.0).named("f".to_string());
+        let f = Tensor::singleton(-2.0).named("f".to_string()).with_grad();
 
         let y = &f * &d;
 

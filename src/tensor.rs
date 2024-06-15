@@ -68,6 +68,11 @@ impl Tensor {
         metadata.grad = Some(grad);
     }
 
+    pub fn with_grad(self) -> Self {
+        self.set_grad(Tensor::empty());
+        self
+    }
+
     pub fn named(self, name: String) -> Self {
         let binding = self.metadata();
         let mut metadata = binding.borrow_mut();
