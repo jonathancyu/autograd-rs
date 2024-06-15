@@ -99,15 +99,16 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
                 last: data.clone(),
                 grad_fn: Box::new(move |grad: f64| {
                     // y = a + b
-                    // dL/da = (dL/dy)(dy/da) = grad * 1
-                    // dL/db = (dL/dy)(dy/db) = grad * 1
-                    let mut left = left.borrow_mut();
-                    let mut right = right.borrow_mut();
-                    left.grad += grad;
-                    right.grad += grad;
+                    // a.grad = dL/da = (dL/dy)(dy/da) = grad * 1
+                    // b.grad = dL/db = (dL/dy)(dy/db) = grad * 1
+                    let mut a = left.borrow_mut();
+                    let mut b = right.borrow_mut();
+                    a.grad += grad;
+                    b.grad += grad;
+                    println!("({} + {})", a.name, b.name);
 
-                    (left.grad_fn)(grad);
-                    (right.grad_fn)(grad)
+                    (a.grad_fn)(grad);
+                    (b.grad_fn)(grad)
                 }),
                 ..TensorData::default()
             }.wrap(),
@@ -154,20 +155,17 @@ impl<'a> Mul<&'a Tensor> for &'a Tensor {
             metadata: TensorData {
                 name,
                 last: data.clone(),
-                grad_fn: Box::new(move |grad: f64| {
+                grad_fn: Box::new(move |grad: f64| { // TODO: make metadata parents, make grad_fn an ENUM to be more rust
                     // y = a * b
-                    // dL/da = (dL/dy)(dy/da) = grad * b
-                    // dL/db = (dL/dy)(dy/db) = grad * a
-                    left.borrow_mut().grad += grad;
-                    right.borrow_mut().grad += grad;
-
-                    let mut left = left.borrow_mut();
-                    let mut right = right.borrow_mut();
-                    left.grad += grad;
-                    right.grad += grad;
-
-                    (left.grad_fn)(grad);
-                    (right.grad_fn)(grad)
+                    // a.grad = dL/da = (dL/dy)(dy/da) = grad * b
+                    // b.grad = dL/db = (dL/dy)(dy/db) = grad * a
+                    let mut a = left.borrow_mut();
+                    let mut b = right.borrow_mut();
+                    a.grad += grad * b.last[0][0]; // TODO: MAKE THESE TENSORS!!!!
+                    b.grad += grad * a.last[0][0];
+                    println!("({} * {})", a.name, b.name);
+                    (a.grad_fn)(grad);
+                    (b.grad_fn)(grad);
                 }),
                 ..TensorData::default()
             }.wrap(),
