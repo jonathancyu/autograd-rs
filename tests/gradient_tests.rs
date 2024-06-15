@@ -42,7 +42,7 @@ mod gradient_tests {
         // d = e + c
         // e.grad = dL/de = (dL/dd)(dd/de) = dL/dd * 1 = d.grad = -2
         assert!(e.grad() == d.grad() && e.grad() == -2.0);
-        // c.grad = dL/dc = (dL/dy)(dy/dd) = dL/dE * 1 = d.grad
+        // c.grad = dL/dc = (dL/dy)(dy/dd) = dL/dE * 1 = d.grad = -2
         assert!(c.grad() == d.grad() && c.grad() == -2.0);
 
         // a = 1.0
