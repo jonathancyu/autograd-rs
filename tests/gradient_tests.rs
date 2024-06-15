@@ -26,14 +26,29 @@ mod gradient_tests {
         y.backward();
 
         // Assert correct gradient
+        // f = -2.0
+        // d = e + c
+        // y = f * d
         assert_eq!(1.0, y.grad());
+        // dL/df = (dL/dy)(dy/df) = y.grad * d.last = 1 * 12 = 12
         assert_eq!(f.item(), d.grad());
+        // dL/dd = (dL/dy)(dy/dd) = y.grad * f.last = 1 * -2 = -2
         assert_eq!(d.item(), f.grad());
 
+        // c = 10.0
+        // e = a * b
+        // d = e + c
+        // dL/de = (dL/dd)(dd/de) = dL/dd * 1 = d.grad
+        assert_eq!(d.grad(), e.grad());
+        // dL/dc = (dL/dy)(dy/dd) = dL/dE * 1 = d.grad
+        assert_eq!(d.grad(), c.grad());
 
-        // *e.grad.borrow_mut() = 1.0;
-        // e.backward(1.0);
-        // assert_eq!(0.0, *a.grad.borrow_mut());
-        // assert_eq!(0.0, *a.grad.borrow_mut());
+        // a = 1.0
+        // b = 2.0
+        // e = a * b
+        // dL/da = (dL/de)(de/da) = e.grad * b.last
+        assert_eq!(e.grad() * b.item(), a.grad());
+        // dL/db = (dL/de)(de/db) = e.grad * a.last
+        assert_eq!(e.grad() * a.item(), b.grad());
     }
 }
