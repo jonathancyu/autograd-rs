@@ -90,8 +90,8 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
 
         let name = format!("({} + {})", self.name(), right.name());
 
-        let left = self.metadata.clone();
-        let right = right.metadata.clone();
+        let left: Rc<RefCell<TensorData>> = self.metadata.clone();
+        let right: Rc<RefCell<TensorData>> = right.metadata.clone();
         Tensor {
             data: data.clone(),
             metadata: TensorData {
@@ -103,12 +103,13 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
                     // b.grad = dL/db = (dL/dy)(dy/db) = grad * 1
                     let mut a = left.borrow_mut();
                     let mut b = right.borrow_mut();
+                    println!("pre: a: {} = {}, b: {} = {}", a.name, b.name, a.grad, b.grad);
                     a.grad += grad;
                     b.grad += grad;
-                    println!("({} + {})", a.name, b.name);
+                    println!("ADD: a: {} = {}, b: {} = {}, grad = {}", a.name, b.name, a.grad, b.grad, grad);
 
-                    (a.grad_fn)(grad);
-                    (b.grad_fn)(grad)
+                    (a.grad_fn)(a.grad);
+                    (b.grad_fn)(b.grad);
                 }),
                 ..TensorData::default()
             }.wrap(),
@@ -161,11 +162,12 @@ impl<'a> Mul<&'a Tensor> for &'a Tensor {
                     // b.grad = dL/db = (dL/dy)(dy/db) = grad * a
                     let mut a = left.borrow_mut();
                     let mut b = right.borrow_mut();
+                    println!("pre: a: {} = {}, b: {} = {}", a.name, b.name, a.grad, b.grad);
                     a.grad += grad * b.last[0][0]; // TODO: MAKE THESE TENSORS!!!!
                     b.grad += grad * a.last[0][0];
-                    println!("({} * {})", a.name, b.name);
-                    (a.grad_fn)(grad);
-                    (b.grad_fn)(grad);
+                    println!("MUL: a: {} = {}, b: {} = {}, grad = {}", a.name, b.name, a.grad, b.grad, grad);
+                    (a.grad_fn)(a.grad);
+                    (b.grad_fn)(b.grad);
                 }),
                 ..TensorData::default()
             }.wrap(),
