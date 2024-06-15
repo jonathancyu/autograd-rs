@@ -1,4 +1,5 @@
 #[cfg(test)]
+
 mod tensor_tests {
     use llm_rs::tensor::Tensor;
 
@@ -59,7 +60,7 @@ mod tensor_tests {
 
         let expected = Tensor::fill(2, 2, 3.0);
 
-        assert_eq!(expected, &a + &b);
+        assert_eq!(expected, &a + &&&&&&&b);
     }
 
     #[test]

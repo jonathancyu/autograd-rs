@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod gradient_tests {
-    use llm_rs::tensor::{Backward, Tensor};
+    use llm_rs::tensor::Tensor;
 
     #[test]
     fn small_computation_graph() {
@@ -22,7 +22,7 @@ mod gradient_tests {
         assert_eq!(-24.0, y.item());
 
         // Propogate gradient
-        y.set_grad(1.0);
+        y.set_grad(Tensor::singleton(1.0));
         y.backward();
 
         // Assert correct gradient
@@ -30,28 +30,28 @@ mod gradient_tests {
         // d = e + c
         // ---------
         // y = f * d
-        assert_eq!(1.0, y.grad());
+        assert_eq!(1.0, y.grad().item());
         // d.grad = dL/dd = (dL/dy)(dy/dd) = y.grad * f.last = 1 * -2 = -2
-        assert!(d.grad() == (f.item() * y.grad()) && d.grad() == -2.0);
+        assert!(d.grad() == (&f * &y.grad()) && d.grad().item() == -2.0);
         // f.grad = dL/df = (dL/dy)(dy/df) = y.grad * d.last = 1 * 12 = 12
-        assert!(f.grad() == (d.item() * y.grad()) && f.grad() == 12.0);
+        assert!(f.grad() == (&d * &y.grad()) && f.grad().item() == 12.0);
 
         // c = 10.0
         // e = a * b
         // ---------
         // d = e + c
         // e.grad = dL/de = (dL/dd)(dd/de) = dL/dd * 1 = d.grad = -2
-        assert!(e.grad() == d.grad() && e.grad() == -2.0);
+        assert!(e.grad() == d.grad() && e.grad().item() == -2.0);
         // c.grad = dL/dc = (dL/dy)(dy/dd) = dL/dE * 1 = d.grad = -2
-        assert!(c.grad() == d.grad() && c.grad() == -2.0);
+        assert!(c.grad() == d.grad() && c.grad().item() == -2.0);
 
         // a = 1.0
         // b = 2.0
         // ---------
         // e = a * b
         // a.grad = dL/da = (dL/de)(de/da) = e.grad * b.last = -2 * 2 = -4
-        assert!(a.grad() == e.grad() * b.item() && a.grad() == -4.0);
+        assert!(a.grad() == &e.grad() * &b.clone() && a.grad().item() == -4.0);
         // b.grad = dL/db = (dL/de)(de/db) = e.grad * a.last = -2 * 1 = -2
-        assert!(b.grad() == e.grad() * a.item() && b.grad() == -2.0);
+        assert!(b.grad() == &e.grad() * &a.clone() && b.grad().item() == -2.0);
     }
 }

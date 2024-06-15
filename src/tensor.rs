@@ -1,202 +1,43 @@
-use core::f64;
+use core::{f64, panic};
 use std::cell::RefCell;
 use std::fmt::{Debug, Display};
-use std::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
+use std::ops::{Index, IndexMut};
 use std::rc::Rc;
 
+use crate::operations::{GradientNode, GradientOperation};
+
+
 pub struct TensorData {
-    pub last: Vec<Vec<f64>>,
+    pub operation: GradientOperation,
+    pub last: Option<Tensor>,
     pub name: String,
-    pub grad: f64, // TODO: make grad off by default, TODO: should this be a Tensor?
-    pub grad_fn: Box<dyn Fn(f64)>,
+    pub grad: Option<Tensor>, // Shouldn't grad be ties to operation?
 }
+
+impl Default for TensorData {
+    fn default() -> Self {
+        TensorData {
+            name: String::new(),
+            operation: GradientOperation::None,
+            last: None,
+            grad: None
+        }
+    }
+}
+
 impl TensorData {
-    fn wrap(self) -> Rc<RefCell<TensorData>> {
+    pub fn wrap(self) -> Rc<RefCell<TensorData>> {
         Rc::new(RefCell::new(self))
     }
-
-    fn default() -> TensorData {
-        TensorData {
-            last: vec![vec![0.0]],
-            name: String::new(),
-            grad: 0.0,
-            grad_fn: Box::new(nop),
-        }
-    }
 }
+
 
 pub struct Tensor {
-    data: Vec<Vec<f64>>,
-    metadata: Rc<RefCell<TensorData>>,
-}
-
-pub trait Backward {
-    fn backward(self);
-}
-
-impl Backward for &Tensor {
-    fn backward(self) {
-        let binding = self.metadata();
-        let metadata = binding.borrow();
-        println!("{}: {}", metadata.name, metadata.grad);
-
-        (metadata.grad_fn)(metadata.grad)
-    }
-}
-
-// Unary operations
-impl<'a> Neg for &'a Tensor {
-    type Output = Tensor;
-    fn neg(self) -> Tensor {
-        let (m, n) = self.size();
-        let mut data = vec![vec![0.0; n]; m];
-
-        for i in 0..m {
-            for j in 0..n {
-                data[i][j] = -self[i][j];
-            }
-        }
-
-        let name = self.name();
-        let metadata = self.metadata.clone();
-        Tensor {
-            data: data.clone(),
-            metadata: TensorData {
-                last: data.clone(),
-                name,
-                grad_fn: Box::new(move |grad: f64| {
-                    // y = -a
-                    // dL/da = (dL/dy)(dy/da) = grad * -1
-                    metadata.borrow_mut().grad -= grad;
-                }),
-                ..TensorData::default()
-            }.wrap(),
-        }
-    }
-}
-
-// Binary operations
-impl<'a> Add<&'a Tensor> for &'a Tensor {
-    type Output = Tensor;
-    fn add(self, right: &'a Tensor) -> Self::Output {
-        let (m, n) = self.size();
-        assert!((m, n) == right.size());
-        let mut data = vec![vec![0.0; n]; m];
-        for i in 0..m {
-            for j in 0..n {
-                data[i][j] = self[i][j] + right[i][j];
-            }
-        }
-
-        let name = format!("({} + {})", self.name(), right.name());
-
-        let left: Rc<RefCell<TensorData>> = self.metadata.clone();
-        let right: Rc<RefCell<TensorData>> = right.metadata.clone();
-        Tensor {
-            data: data.clone(),
-            metadata: TensorData {
-                name,
-                last: data.clone(),
-                grad_fn: Box::new(move |grad: f64| {
-                    // y = a + b
-                    // a.grad = dL/da = (dL/dy)(dy/da) = grad * 1
-                    // b.grad = dL/db = (dL/dy)(dy/db) = grad * 1
-                    let mut a = left.borrow_mut();
-                    let mut b = right.borrow_mut();
-                    println!("pre: a: {} = {}, b: {} = {}", a.name, b.name, a.grad, b.grad);
-                    a.grad += grad;
-                    b.grad += grad;
-                    println!("ADD: a: {} = {}, b: {} = {}, grad = {}", a.name, b.name, a.grad, b.grad, grad);
-
-                    (a.grad_fn)(a.grad);
-                    (b.grad_fn)(b.grad);
-                }),
-                ..TensorData::default()
-            }.wrap(),
-        }
-    }
-}
-
-
-impl<'a> Sub<&'a Tensor> for &'a Tensor {
-    type Output = Tensor;
-    fn sub(self, right: &'a Tensor) -> Self::Output {
-        let name = format!("({} - {})", self.name(), right.name());
-        (self + &(-right)).named(name) // TODO: is this correct?
-    }
-}
-
-impl<'a> Mul<&'a Tensor> for &'a Tensor {
-    type Output = Tensor;
-    fn mul(self, right: &'a Tensor) -> Tensor {
-        let (m, n) = self.size();
-        let (n_2, p) = right.size();
-
-        // [m x n][n x p] => [m x p]
-        if n != n_2 {
-            panic!("Incompatible dimensions")
-        }
-        let mut data = vec![vec![0.0; p]; m];
-
-        // TODO: loop over (i,j,k) tuples
-        for i in 0..m {
-            for j in 0..p {
-                for k in 0..n {
-                    data[i][j] += self[i][k] * right[k][j];
-                }
-            }
-        }
-        let name = format!("({} * {})", self.name(), right.name());
-
-        let left = self.metadata.clone();
-        let right = right.metadata.clone();
-
-        Tensor {
-            data: data.clone(),
-            metadata: TensorData {
-                name,
-                last: data.clone(),
-                grad_fn: Box::new(move |grad: f64| { // TODO: make metadata parents, make grad_fn an ENUM to be more rust
-                    // y = a * b
-                    // a.grad = dL/da = (dL/dy)(dy/da) = grad * b
-                    // b.grad = dL/db = (dL/dy)(dy/db) = grad * a
-                    let mut a = left.borrow_mut();
-                    let mut b = right.borrow_mut();
-                    println!("pre: a: {} = {}, b: {} = {}", a.name, b.name, a.grad, b.grad);
-                    a.grad += grad * b.last[0][0]; // TODO: MAKE THESE TENSORS!!!!
-                    b.grad += grad * a.last[0][0];
-                    println!("MUL: a: {} = {}, b: {} = {}, grad = {}", a.name, b.name, a.grad, b.grad, grad);
-                    (a.grad_fn)(a.grad);
-                    (b.grad_fn)(b.grad);
-                }),
-                ..TensorData::default()
-            }.wrap(),
-        }
-
-    }
-}
-
-impl PartialEq for Tensor {
-    fn eq(&self, other: &Self) -> bool {
-        let (m, n) = self.size();
-        let (m_2, n_2) = other.size();
-        if m != m_2 || n != n_2 {
-            return false;
-        }
-        for i in 0..m {
-            for j in 0..n {
-                if self[i][j] != other[i][j] {
-                    return false;
-                }
-            }
-        }
-        true
-    }
+    pub data: Vec<Vec<f64>>,
+    pub metadata: Rc<RefCell<TensorData>>,
 }
 
 // Housekeeping
-fn nop(_grad: f64) {}
-
 impl Default for Tensor {
     fn default() -> Tensor {
         Tensor {
@@ -209,11 +50,22 @@ impl Default for Tensor {
 // TODO: clean up this dumping ground
 #[allow(dead_code)]
 impl Tensor {
-    pub fn set_grad(&self, grad: f64) {
-        // TODO: there must be a better way.. there must be
+    pub fn backward(&self) {
+        let binding = self.metadata();
+        let metadata = binding.borrow_mut();
+        metadata.backward();
+    }
+
+    pub fn grad(&self) -> Tensor {
+        let binding = self.metadata();
+        let metadata = binding.borrow_mut();
+        metadata.grad().clone()
+    }
+
+    pub fn set_grad(&self, grad: Tensor) {
         let binding = self.metadata();
         let mut metadata = binding.borrow_mut();
-        metadata.grad = grad;
+        metadata.grad = Some(grad);
     }
 
     pub fn named(self, name: String) -> Self {
@@ -229,12 +81,6 @@ impl Tensor {
         metadata.name.clone()
     }
 
-    pub fn data(&self) -> Vec<Vec<f64>> {
-        let binding = self.metadata();
-        let metadata = binding.borrow_mut();
-        metadata.last.clone()
-    }
-
     pub fn metadata(&self) -> Rc<RefCell<TensorData>> {
         self.metadata.clone()
     }
@@ -242,10 +88,7 @@ impl Tensor {
     pub fn from_vector(data: Vec<Vec<f64>>) -> Tensor {
         Tensor {
             data: data.clone(),
-            metadata: TensorData {
-                last: data.clone(),
-                ..TensorData::default()
-            }.wrap()
+            metadata: TensorData::default().wrap(),
         }
     }
 
@@ -257,6 +100,14 @@ impl Tensor {
         )
     }
 
+    pub fn empty() -> Tensor {
+        let data = vec![vec![]];
+        Tensor {
+            data: data.clone(),
+            metadata: TensorData::default().wrap()
+        }
+    }
+
     pub fn singleton(value: f64) -> Tensor {
         Tensor::fill(1, 1, value)
     }
@@ -265,10 +116,7 @@ impl Tensor {
         let data = vec![vec![value; n]; m];
         Tensor {
             data: data.clone(),
-            metadata: TensorData {
-                last: data.clone(),
-                ..TensorData::default()
-            }.wrap()
+            metadata: TensorData::default().wrap()
         }
     }
 
@@ -284,12 +132,6 @@ impl Tensor {
             (1, 1) => self[0][0],
             _ => panic!("Cannot call item() on a tensor with non-unit size"),
         }
-    }
-
-    pub fn grad(&self) -> f64 {
-        let binding = self.metadata();
-        let metadata = binding.borrow();
-        metadata.grad
     }
 
     // Operations
@@ -320,7 +162,7 @@ impl Tensor {
     }
 
     pub fn size(&self) -> (usize, usize) {
-        let data = self.data();
+        let data = &self.data;
         match data.is_empty() {
             true => (0, 0),
             false => match data[0].is_empty() {
@@ -392,8 +234,7 @@ impl Index<usize> for Tensor {
 
 impl Debug for Tensor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let result = self
-            .data()
+        let result = self.data
             .iter()
             .map(|row| {
                 row.iter()
@@ -411,8 +252,7 @@ impl Debug for Tensor {
 
 impl Display for Tensor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let result = self
-            .data()
+        let result = self.data
             .iter()
             .map(|row| {
                 row.iter()
