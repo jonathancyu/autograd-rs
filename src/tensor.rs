@@ -1,23 +1,22 @@
 use core::f64;
+
 use std::cell::RefCell;
 use std::fmt::{Debug, Display};
 use std::ops::{Add, Index, IndexMut, Mul, Neg, Sub};
 use std::rc::Rc;
 
-pub struct TensorData {
-    pub last: Vec<Vec<f64>>,
+pub struct TensorMetadata {
     pub name: String,
     pub grad: f64, // TODO: make grad off by default, TODO: should this be a Tensor?
     pub grad_fn: Box<dyn Fn(f64)>,
 }
-impl TensorData {
-    fn wrap(self) -> Rc<RefCell<TensorData>> {
+impl TensorMetadata {
+    fn wrap(self) -> Rc<RefCell<TensorMetadata>> {
         Rc::new(RefCell::new(self))
     }
 
-    fn default() -> TensorData {
-        TensorData {
-            last: vec![vec![0.0]],
+    fn default() -> TensorMetadata {
+        TensorMetadata {
             name: String::new(),
             grad: 0.0,
             grad_fn: Box::new(nop),
@@ -27,7 +26,7 @@ impl TensorData {
 
 pub struct Tensor {
     data: Vec<Vec<f64>>,
-    metadata: Rc<RefCell<TensorData>>,
+    metadata: Rc<RefCell<TensorMetadata>>,
 }
 
 pub trait Backward {
@@ -60,16 +59,15 @@ impl<'a> Neg for &'a Tensor {
         let name = self.name();
         let metadata = self.metadata.clone();
         Tensor {
-            data: data.clone(),
-            metadata: TensorData {
-                last: data.clone(),
+            data,
+            metadata: TensorMetadata {
                 name,
                 grad_fn: Box::new(move |grad: f64| {
                     // y = -a
                     // dL/da = (dL/dy)(dy/da) = grad * -1
                     metadata.borrow_mut().grad -= grad;
                 }),
-                ..TensorData::default()
+                ..TensorMetadata::default()
             }.wrap(),
         }
     }
@@ -93,23 +91,17 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
         let left = self.metadata.clone();
         let right = right.metadata.clone();
         Tensor {
-            data: data.clone(),
-            metadata: TensorData {
+            data,
+            metadata: TensorMetadata {
                 name,
-                last: data.clone(),
                 grad_fn: Box::new(move |grad: f64| {
                     // y = a + b
                     // dL/da = (dL/dy)(dy/da) = grad * 1
                     // dL/db = (dL/dy)(dy/db) = grad * 1
-                    let mut left = left.borrow_mut();
-                    let mut right = right.borrow_mut();
-                    left.grad += grad;
-                    right.grad += grad;
-
-                    (left.grad_fn)(grad);
-                    (right.grad_fn)(grad)
+                    left.borrow_mut().grad += grad;
+                    right.borrow_mut().grad += grad;
                 }),
-                ..TensorData::default()
+                ..TensorMetadata::default()
             }.wrap(),
         }
     }
@@ -120,7 +112,7 @@ impl<'a> Sub<&'a Tensor> for &'a Tensor {
     type Output = Tensor;
     fn sub(self, right: &'a Tensor) -> Self::Output {
         let name = format!("({} - {})", self.name(), right.name());
-        (self + &(-right)).named(name) // TODO: is this correct?
+        (self + &(-right)).named(name)
     }
 }
 
@@ -150,26 +142,19 @@ impl<'a> Mul<&'a Tensor> for &'a Tensor {
         let right = right.metadata.clone();
 
         Tensor {
-            data: data.clone(),
-            metadata: TensorData {
+            data,
+            metadata: TensorMetadata {
                 name,
-                last: data.clone(),
                 grad_fn: Box::new(move |grad: f64| {
                     // y = a * b
                     // dL/da = (dL/dy)(dy/da) = grad * b
                     // dL/db = (dL/dy)(dy/db) = grad * a
-                    left.borrow_mut().grad += grad;
-                    right.borrow_mut().grad += grad;
-
-                    let mut left = left.borrow_mut();
-                    let mut right = right.borrow_mut();
-                    left.grad += grad;
+                    let left = left.borrow_mut();
+                    let right = right.borrow_mut();
+                    left.grad += grad * left.data;
                     right.grad += grad;
-
-                    (left.grad_fn)(grad);
-                    (right.grad_fn)(grad)
                 }),
-                ..TensorData::default()
+                ..TensorMetadata::default()
             }.wrap(),
         }
 
@@ -185,7 +170,7 @@ impl PartialEq for Tensor {
         }
         for i in 0..m {
             for j in 0..n {
-                if self[i][j] != other[i][j] {
+                if self[i][j] != other.data[i][j] {
                     return false;
                 }
             }
@@ -201,7 +186,7 @@ impl Default for Tensor {
     fn default() -> Tensor {
         Tensor {
             data: vec![vec![0.0]],
-            metadata: TensorData::default().wrap(),
+            metadata: TensorMetadata::default().wrap(),
         }
     }
 }
@@ -225,36 +210,26 @@ impl Tensor {
 
     pub fn name(&self) -> String {
         let binding = self.metadata();
-        let metadata = binding.borrow_mut();
+        let metadata = binding.borrow();
         metadata.name.clone()
     }
 
-    pub fn data(&self) -> Vec<Vec<f64>> {
-        let binding = self.metadata();
-        let metadata = binding.borrow_mut();
-        metadata.last.clone()
-    }
-
-    pub fn metadata(&self) -> Rc<RefCell<TensorData>> {
+    pub fn metadata(&self) -> Rc<RefCell<TensorMetadata>> {
         self.metadata.clone()
     }
 
     pub fn from_vector(data: Vec<Vec<f64>>) -> Tensor {
         Tensor {
-            data: data.clone(),
-            metadata: TensorData {
-                last: data.clone(),
-                ..TensorData::default()
-            }.wrap()
+            data,
+            ..Tensor::default()
         }
     }
 
     pub fn from_array(array: &[&[f64]]) -> Tensor {
-        Tensor::from_vector(
-            array.iter().map(|&row| {
-                row.to_vec()
-            }).collect::<Vec<_>>(),
-        )
+        Tensor {
+            data: array.iter().map(|&row| row.to_vec()).collect::<Vec<_>>(),
+            ..Tensor::default()
+        }
     }
 
     pub fn singleton(value: f64) -> Tensor {
@@ -262,13 +237,9 @@ impl Tensor {
     }
 
     pub fn fill(m: usize, n: usize, value: f64) -> Tensor {
-        let data = vec![vec![value; n]; m];
         Tensor {
-            data: data.clone(),
-            metadata: TensorData {
-                last: data.clone(),
-                ..TensorData::default()
-            }.wrap()
+            data: vec![vec![value; n]; m],
+            ..Tensor::default()
         }
     }
 
@@ -293,21 +264,21 @@ impl Tensor {
     }
 
     // Operations
-    // pub fn concat(&self, x: &Tensor) -> Tensor {
-    //     let (m, _) = self.size();
-    //     let (x_m, _) = x.size();
-    //     if x_m != m {
-    //         panic!("Expected {} got {}", m, x_m);
-    //     }
-    //
-    //     let mut result = self.clone(); // TODO: is data the same pointer?
-    //     for row in x.data.iter() {
-    //         result.data.push(row.to_vec());
-    //     }
-    //     result
-    // }
+    pub fn concat(&self, x: &Tensor) -> Tensor {
+        let (m, _) = self.size();
+        let (x_m, _) = x.size();
+        if x_m != m {
+            panic!("Expected {} got {}", m, x_m);
+        }
 
-    pub fn pow(&self, rhs: i32) -> Tensor {
+        let mut result = self.clone(); // TODO: is data the same pointer?
+        for row in x.data.iter() {
+            result.data.push(row.to_vec());
+        }
+        result
+    }
+
+    pub fn pow(self, rhs: i32) -> Tensor {
         let (m, n) = self.size();
         let mut data = vec![vec![0.0; n]; m];
         for i in 0..m {
@@ -316,16 +287,18 @@ impl Tensor {
             }
         }
 
-        Tensor::from_vector(data)
+        Tensor {
+            data,
+            ..Tensor::default()
+        }
     }
 
     pub fn size(&self) -> (usize, usize) {
-        let data = self.data();
-        match data.is_empty() {
+        match self.data.is_empty() {
             true => (0, 0),
-            false => match data[0].is_empty() {
+            false => match self.data[0].is_empty() {
                 true => (0, 0),
-                false => (data.len(), data[0].len()),
+                false => (self.data.len(), self.data[0].len()),
             },
         }
     }
@@ -368,22 +341,16 @@ impl Clone for Tensor {
                 data[i][j] = self[i][j];
             }
         }
-        Tensor::from_vector(data)
+        Tensor {
+            data,
+            ..Tensor::default()
+        }
     }
 }
 
-// impl Index<usize> for Dim<IxDynImpl>
-// {
-//     type Output = <IxDynImpl as Index<usize>>::Output;
-//     fn index(&self, index: usize) -> &Self::Output
-//     {
-//         &self.ix()[index]
-//     }
-// }
-
-
 impl IndexMut<usize> for Tensor {
-    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+    //type Output = &'a mut Vec<f64>;
+    fn index_mut(&mut self, index: usize) -> &mut Vec<f64> {
         let (m, _n) = self.size();
         assert!(index < m, "Index out of bounds");
         &mut self.data[index]
@@ -399,11 +366,10 @@ impl Index<usize> for Tensor {
     }
 }
 
-
 impl Debug for Tensor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let result = self
-            .data()
+            .data
             .iter()
             .map(|row| {
                 row.iter()
@@ -422,7 +388,7 @@ impl Debug for Tensor {
 impl Display for Tensor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let result = self
-            .data()
+            .data
             .iter()
             .map(|row| {
                 row.iter()
