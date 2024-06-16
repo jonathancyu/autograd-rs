@@ -29,12 +29,12 @@ impl Tensor {
 
     pub fn grad(&self) -> Tensor {
         let gradient = self.gradient.borrow();
-        gradient.value.clone()
+        gradient.value.clone().expect("Tensor doesn't have grad enabled")
     }
 
-    pub fn set_grad(&self, grad: Tensor) {
+    pub fn set_grad(&self, value: Tensor) {
         let mut gradient = self.gradient.borrow_mut();
-        gradient.value = grad;
+        gradient.value = Some(value);
     }
 
     pub fn with_grad(self) -> Self {

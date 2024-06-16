@@ -4,36 +4,49 @@ mod gradient_tests {
 
     #[test]
     fn small_computation_graph() {
+        let a_val = 1.0;
+        let b_val = 2.0;
+        let c_val = 10.0;
+        let f_val = -2.0;
         // y = f * ((a * b) + c)
         //   = f * (e + c)
         //   = f * d
-        let a = Tensor::singleton(1.0).named("a".to_string()).with_grad();
-        let b = Tensor::singleton(2.0).named("b".to_string()).with_grad();
-        let e = a * b;
-        let c = Tensor::singleton(10.0).named("c".to_string()).with_grad();
-        let d = e + c;
-        let f = Tensor::singleton(-2.0).named("f".to_string()).with_grad();
+        let a = Tensor::singleton(a_val).named("a".to_string()).with_grad();
+        let b = Tensor::singleton(b_val).named("b".to_string()).with_grad();
+        let e = &a * &b;
+        let c = Tensor::singleton(c_val).named("c".to_string()).with_grad();
+        let d = &e + &c;
+        let f = Tensor::singleton(f_val).named("f".to_string()).with_grad();
 
-        let y = f * d;
+        let y = &f * &d;
 
         // Assert correct value
-        assert_eq!(2.0, e.item());
-        assert_eq!(12.0, d.item());
-        assert_eq!(-24.0, y.item());
+        let y_val = y.item();
+        assert_eq!(-24.0, y_val);
+        let d_val = d.item();
+        assert_eq!(12.0, d_val);
+        let e_val = e.item();
+        assert_eq!(2.0, e_val);
 
         // Propogate gradient
         y.set_grad(Tensor::singleton(1.0));
         Differentiable::backward(&y);
-        // Assert correct gradient
         // f = -2.0
         // d = e + c
         // ---------
         // y = f * d
-        assert_eq!(1.0, y.grad().item());
+        let y_grad = y.grad();
+        assert_eq!(1.0, y_grad.item());
         // d.grad = dL/dd = (dL/dy)(dy/dd) = y.grad * f.last = 1 * -2 = -2
-        assert!(d.grad() == (f * y.grad()) && d.grad().item() == -2.0);
+        let d_grad = d.grad();
+        assert_eq!(d_grad, f.clone() * y.clone().grad());
+        assert_eq!(d_grad.item(), -2.0);
         // f.grad = dL/df = (dL/dy)(dy/df) = y.grad * d.last = 1 * 12 = 12
-        assert!(f.grad() == (d * y.grad()) && f.grad().item() == 12.0);
+        let f_grad =  f.grad();
+        assert_eq!(f_grad, d.clone() * y.clone().grad());
+        assert_eq!(f_grad.item(), 12.0);
+
+        // Assert correct gradient
 
         // c = 10.0
         // e = a * b
@@ -52,5 +65,6 @@ mod gradient_tests {
         assert!(a.grad() == e.grad() * b.clone() && a.grad().item() == -4.0);
         // b.grad = dL/db = (dL/de)(de/db) = e.grad * a.last = -2 * 1 = -2
         assert!(b.grad() == e.grad() * a.clone() && b.grad().item() == -2.0);
+        //
     }
 }
