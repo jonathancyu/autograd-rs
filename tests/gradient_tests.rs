@@ -30,7 +30,7 @@ mod gradient_tests {
 
         // Propogate gradient
         y.set_grad(Tensor::singleton(1.0));
-        Differentiable::backward(&y);
+        y.backward();
         // f = -2.0
         // d = e + c
         // ---------
@@ -39,11 +39,11 @@ mod gradient_tests {
         assert_eq!(1.0, y_grad.item());
         // d.grad = dL/dd = (dL/dy)(dy/dd) = y.grad * f.last = 1 * -2 = -2
         let d_grad = d.grad();
-        assert_eq!(d_grad, f.clone() * y.clone().grad());
+        assert_eq!(d_grad, f.clone() * y.grad());
         assert_eq!(d_grad.item(), -2.0);
         // f.grad = dL/df = (dL/dy)(dy/df) = y.grad * d.last = 1 * 12 = 12
         let f_grad =  f.grad();
-        assert_eq!(f_grad, d.clone() * y.clone().grad());
+        assert_eq!(f_grad, d.clone() * y.grad());
         assert_eq!(f_grad.item(), 12.0);
 
         // Assert correct gradient

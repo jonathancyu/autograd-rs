@@ -1,7 +1,5 @@
 use std::{
-    cell::RefCell,
-    ops::{ Add, AddAssign, Mul, Neg, Sub, SubAssign },
-    rc::Rc,
+    cell::RefCell, ops::{ Add, AddAssign, Mul, Neg, Sub, SubAssign }, rc::Rc
 };
 
 use crate::tensor::Tensor;
@@ -45,7 +43,9 @@ pub enum GradientOperation {
 }
 
 pub trait Differentiable {
+    fn with_grad(self) -> Self;
     fn grad(&self) -> Tensor;
+    fn set_grad(&self, grad: Tensor);
     fn add_grad(&self, grad: Tensor);
     fn last(&self) -> Tensor;
 
@@ -53,10 +53,25 @@ pub trait Differentiable {
 }
 
 impl Differentiable for Tensor {
+    fn with_grad(self) -> Self {
+        let mut gradient = self.gradient.borrow_mut();
+        match gradient.value {
+            Some(_) => println!("Tensor already has grad enabled."),
+            None => {
+                let (m, n) = self.size();
+                gradient.value = Some(Tensor::zeros(m, n));
+            },
+        };
+        self.clone() // TODO: is this bad?
+    }
     fn grad(&self) -> Tensor {
         let gradient = self.gradient.borrow();
         let value = gradient.value.clone().expect("Tensor doesn't have grad enabled");
         value.clone()
+    }
+    fn set_grad(&self, grad: Tensor) {
+        let mut gradient = self.gradient.borrow_mut();
+        gradient.value = Some(grad)
     }
 
     fn add_grad(&self, grad: Tensor) {

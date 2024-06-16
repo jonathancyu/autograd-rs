@@ -26,22 +26,6 @@ impl Default for Tensor {
 // TODO: clean up this dumping ground
 #[allow(dead_code)]
 impl Tensor {
-
-    pub fn grad(&self) -> Tensor {
-        let gradient = self.gradient.borrow();
-        gradient.value.clone().expect("Tensor doesn't have grad enabled")
-    }
-
-    pub fn set_grad(&self, value: Tensor) {
-        let mut gradient = self.gradient.borrow_mut();
-        gradient.value = Some(value);
-    }
-
-    pub fn with_grad(self) -> Self {
-        self.set_grad(Tensor::empty());
-        self
-    }
-
     pub fn named(mut self, name: String) -> Self {
         self.name = name;
         self
@@ -176,7 +160,11 @@ impl Clone for Tensor {
                 data[i][j] = self[i][j];
             }
         }
-        Tensor::from_vector(data)
+        Tensor {
+            data: self.data.clone(),
+            name: self.name.clone(),
+            gradient: Rc::clone(&self.gradient)
+        }
     }
 }
 
