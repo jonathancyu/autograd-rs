@@ -4,54 +4,80 @@ use std::{
     rc::Rc,
 };
 
-use crate::tensor::{Tensor, TensorData};
+use crate::tensor::Tensor;
+
+pub struct Gradient {
+    pub operation: GradientOperation,
+    pub last: Option<Tensor>,
+    pub value: Tensor, // Shouldn't grad be ties to operation?
+}
+
+impl Default for Gradient {
+    fn default() -> Self {
+        Gradient {
+            operation: GradientOperation::None,
+            last: None,
+            value: Tensor::empty()
+        }
+    }
+}
+
+impl Gradient {
+    pub fn wrap(self) -> Rc<RefCell<Gradient>> {
+        Rc::new(RefCell::new(self))
+    }
+}
 
 #[derive(Clone)]
 pub enum Parents {
     None,
-    Unary(Rc<RefCell<TensorData>>)
+    Unary(Rc<RefCell<Gradient>>)
 }
 
 // TODO: no words
 #[derive(Clone)]
 pub enum GradientOperation {
     None,
-    Neg(Rc<RefCell<TensorData>>),
-    Add(Rc<RefCell<TensorData>>, Rc<RefCell<TensorData>>),
-    Sub(Rc<RefCell<TensorData>>, Rc<RefCell<TensorData>>),
-    Mul(Rc<RefCell<TensorData>>, Rc<RefCell<TensorData>>)
+    Neg(Tensor),
+    Add(Tensor, Tensor),
+    Sub(Tensor, Tensor),
+    Mul(Tensor, Tensor)
 }
-pub trait GradientNode {
+
+pub trait Differentiable {
     fn backward(&self);
     fn grad(&self) -> Tensor;
 }
 
-impl GradientNode for TensorData {
+impl Differentiable for Tensor {
     fn grad(&self) -> Tensor {
-        match &self.grad {
-            Some(grad) => grad.clone(),
-            None => panic!("Gradient is not enabled on '{}'", self.name),
-        }
+        let gradient = self.gradient.borrow();
+        gradient.value.clone()
     }
 
     fn backward(&self) {
-        match &self.operation {
+        let grad = self.grad().clone();
+        let gradient = self.gradient.borrow_mut();
+        match &gradient.operation {
             GradientOperation::None => {},
             GradientOperation::Neg(a) => {
                 // y = -a
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * -1
-                let mut a = a.borrow_mut();
-                a.grad = Some((&a.grad() + &-(&self.grad())).clone());
+                let mut a_grad = a.gradient.borrow_mut();
+                let mut a_val = &mut a_grad.value;
+                a_val += -grad;
                 a.backward();
             },
             GradientOperation::Add(a, b) => {
                 // y = a + b
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * 1
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * 1
-                let mut a = a.borrow_mut();
-                let mut b = b.borrow_mut();
-                a.grad = Some(( &a.grad() + &self.grad() ).clone());
-                b.grad = Some(( &b.grad() + &self.grad() ).clone());
+                let mut a_grad = a.gradient.borrow_mut();
+                let mut b_grad = b.gradient.borrow_mut();
+                let mut a_val = &mut a_grad.value;
+                let mut b_val = &mut b_grad.value;
+                a_val += grad.clone();
+                b_val += grad.clone();
                 a.backward();
                 b.backward();
             },
@@ -59,25 +85,27 @@ impl GradientNode for TensorData {
                 // y = a - b
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * 1
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * -1
-                let mut a = a.borrow_mut();
-                let mut b = b.borrow_mut();
-                a.grad = Some(( &a.grad() + &self.grad() ).clone());
-                b.grad = Some(( &b.grad() + &-(&self.grad()) ).clone());
+                let mut a_grad = a.gradient.borrow_mut();
+                let mut b_grad = b.gradient.borrow_mut();
+                let mut a_val = &mut a_grad.value;
+                let mut b_val = &mut b_grad.value;
+                a_val += grad.clone();
+                b_val += -grad.clone();
                 a.backward();
                 b.backward();
-
             },
             GradientOperation::Mul(a, b) => {
                 // y = a * b
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * b
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * a
-                let mut a = a.borrow_mut();
-                let mut b = b.borrow_mut();
-                let b_last = &b.last.clone().expect("last is None");
-                let a_last = &a.last.clone().expect("last is None");
-                a.grad = Some((&a.grad() + &(&self.grad() * b_last)).clone());
-                b.grad = Some((&b.grad() + &(&self.grad() * a_last)).clone());
-
+                let mut a_grad = a.gradient.borrow_mut();
+                let mut b_grad = b.gradient.borrow_mut();
+                let b_last = b_grad.last.as_ref().expect("last is None").clone();
+                let a_last = a_grad.last.as_ref().expect("last is None").clone();
+                let mut a_val = &mut a_grad.value;
+                let mut b_val = &mut b_grad.value;
+                a_val += grad.clone() * b_last;
+                b_val += grad.clone() * a_last;
                 a.backward();
                 b.backward();
             },
@@ -87,9 +115,16 @@ impl GradientNode for TensorData {
 }
 
 // Unary operations
-impl<'a> Neg for &'a Tensor {
+impl Neg for Tensor {
     type Output = Tensor;
-    fn neg(self) -> Tensor {
+
+    fn neg(self) -> Self::Output {
+        *(-&self)
+    }
+}
+impl<'a> Neg for &'a Tensor {
+    type Output = &'a Tensor;
+    fn neg(self) -> &'a Tensor {
         let (m, n) = self.size();
         let mut data = vec![vec![0.0; n]; m];
 
@@ -99,21 +134,19 @@ impl<'a> Neg for &'a Tensor {
             }
         }
 
-        let name = self.name();
-        let metadata = self.metadata.clone();
-        Tensor {
+        &Tensor {
+            name: self.name.clone(),
             data: data.clone(),
-            metadata: TensorData {
-                name,
+            gradient: Gradient {
                 last: Some(self.clone()),
-                operation: GradientOperation::Neg(metadata.clone()),
-                grad: Some(Tensor::fill(m, n, 0.0)),
+                operation: GradientOperation::Neg(self.clone()),
+                value: Tensor::fill(m, n, 0.0),
             }.wrap(),
         }
     }
 }
 // In-place non-gradient operations
-impl AddAssign<Tensor> for Tensor {
+impl<'a> AddAssign<Tensor> for &'a mut Tensor {
     // NON-GRADIENT
     fn add_assign(&mut self, right: Tensor) {
         let (m, n) = self.size();
@@ -126,7 +159,7 @@ impl AddAssign<Tensor> for Tensor {
     }
 }
 
-impl SubAssign<Tensor> for Tensor {
+impl<'a> SubAssign<Tensor> for &'a mut Tensor {
     // NON-GRADIENT
     fn sub_assign(&mut self, right: Tensor) {
         let (m, n) = self.size();
@@ -153,24 +186,28 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
         }
 
 
-        let a: Rc<RefCell<TensorData>> = self.metadata.clone();
-        let b: Rc<RefCell<TensorData>> = right.metadata.clone();
         Tensor {
+            name: format!("({} + {})", self.name, right.name),
             data: data.clone(),
-            metadata: TensorData {
-                name: format!("({} + {})", self.name(), right.name()),
-                operation: GradientOperation::Add(a.clone(), b.clone()),
+            gradient: Gradient {
+                operation: GradientOperation::Add(self.clone(), right.clone()),
                 last: Some(self.clone()),
-                grad: Some(Tensor::fill(m, n, 0.0)),
+                value: Tensor::fill(m, n, 0.0),
             }.wrap(),
         }
     }
 }
+impl Add<Tensor> for Tensor {
+    type Output = Tensor;
 
+    fn add(self, rhs: Tensor) -> Self::Output {
+        &self + &rhs
+    }
+}
 
 impl<'a> Sub<&'a Tensor> for &'a Tensor {
-    type Output = Tensor;
-    fn sub(self, right: &'a Tensor) -> Tensor {
+    type Output = &'a Tensor;
+    fn sub(self, right: &'a Tensor) -> &'a Tensor {
         let (m, n) = self.size();
         assert!((m, n) == right.size());
         let mut data = vec![vec![0.0; n]; m];
@@ -181,23 +218,28 @@ impl<'a> Sub<&'a Tensor> for &'a Tensor {
         }
 
 
-        let a: Rc<RefCell<TensorData>> = self.metadata.clone();
-        let b: Rc<RefCell<TensorData>> = right.metadata.clone();
-        Tensor {
+        &Tensor {
+            name: format!("({} - {})", self.name, right.name),
             data: data.clone(),
-            metadata: TensorData {
-                name: format!("({} - {})", self.name(), right.name()),
-                operation: GradientOperation::Add(a.clone(), b.clone()),
+            gradient: Gradient {
+                operation: GradientOperation::Add(self.clone(), right.clone()),
                 last: Some(self.clone()),
-                grad: Some(Tensor::fill(m, n, 0.0)),
+                value: Tensor::fill(m, n, 0.0),
             }.wrap(),
         }
     }
 }
+impl Sub<Tensor> for Tensor {
+    type Output = Tensor;
+
+    fn sub(self, right: Tensor) -> Self::Output {
+        *( &self - &right )
+    }
+}
 
 impl<'a> Mul<&'a Tensor> for &'a Tensor {
-    type Output = Tensor;
-    fn mul(self, right: &'a Tensor) ->  Tensor {
+    type Output = &'a Tensor;
+    fn mul(self, right: &'a Tensor) -> &'a Tensor {
         let (m, n) = self.size();
         let (n_2, p) = right.size();
 
@@ -216,16 +258,24 @@ impl<'a> Mul<&'a Tensor> for &'a Tensor {
             }
         }
 
-        Tensor {
+        &Tensor {
+            name: format!("({} * {})", self.name, right.name),
             data: data.clone(),
-            metadata: TensorData {
-                name: format!("({} * {})", self.name(), right.name()),
+            gradient: Gradient {
                 last: Some(self.clone()),
-                grad: Some(Tensor::fill(m, p, 0.0)),
-                ..TensorData::default()
+                value: Tensor::fill(m, p, 0.0),
+                ..Gradient::default()
             }.wrap(),
         }
 
+    }
+}
+
+impl Mul<Tensor> for Tensor {
+    type Output = Tensor;
+
+    fn mul(self, right: Tensor) -> Self::Output {
+        *( &self * &right )
     }
 }
 

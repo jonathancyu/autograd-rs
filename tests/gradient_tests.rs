@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod gradient_tests {
-    use llm_rs::tensor::Tensor;
+    use llm_rs::{operations::Differentiable, tensor::Tensor};
 
     #[test]
     fn small_computation_graph() {
@@ -9,12 +9,12 @@ mod gradient_tests {
         //   = f * d
         let a = Tensor::singleton(1.0).named("a".to_string()).with_grad();
         let b = Tensor::singleton(2.0).named("b".to_string()).with_grad();
-        let e = &a * &b;
+        let e = a * b;
         let c = Tensor::singleton(10.0).named("c".to_string()).with_grad();
-        let d = &e + &c;
+        let d = e + c;
         let f = Tensor::singleton(-2.0).named("f".to_string()).with_grad();
 
-        let y = &f * &d;
+        let y = f * d;
 
         // Assert correct value
         assert_eq!(2.0, e.item());
@@ -23,8 +23,7 @@ mod gradient_tests {
 
         // Propogate gradient
         y.set_grad(Tensor::singleton(1.0));
-        y.backward();
-
+        Differentiable::backward(&y);
         // Assert correct gradient
         // f = -2.0
         // d = e + c
@@ -32,9 +31,9 @@ mod gradient_tests {
         // y = f * d
         assert_eq!(1.0, y.grad().item());
         // d.grad = dL/dd = (dL/dy)(dy/dd) = y.grad * f.last = 1 * -2 = -2
-        assert!(d.grad() == (&f * &y.grad()) && d.grad().item() == -2.0);
+        assert!(d.grad() == (f * y.grad()) && d.grad().item() == -2.0);
         // f.grad = dL/df = (dL/dy)(dy/df) = y.grad * d.last = 1 * 12 = 12
-        assert!(f.grad() == (&d * &y.grad()) && f.grad().item() == 12.0);
+        assert!(f.grad() == (d * y.grad()) && f.grad().item() == 12.0);
 
         // c = 10.0
         // e = a * b
@@ -50,8 +49,8 @@ mod gradient_tests {
         // ---------
         // e = a * b
         // a.grad = dL/da = (dL/de)(de/da) = e.grad * b.last = -2 * 2 = -4
-        assert!(a.grad() == &e.grad() * &b.clone() && a.grad().item() == -4.0);
+        assert!(a.grad() == e.grad() * b.clone() && a.grad().item() == -4.0);
         // b.grad = dL/db = (dL/de)(de/db) = e.grad * a.last = -2 * 1 = -2
-        assert!(b.grad() == &e.grad() * &a.clone() && b.grad().item() == -2.0);
+        assert!(b.grad() == e.grad() * a.clone() && b.grad().item() == -2.0);
     }
 }

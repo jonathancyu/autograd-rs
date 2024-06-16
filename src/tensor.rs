@@ -4,45 +4,21 @@ use std::fmt::{Debug, Display};
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
 
-use crate::operations::{GradientNode, GradientOperation};
-
-
-pub struct TensorData {
-    pub operation: GradientOperation,
-    pub last: Option<Tensor>,
-    pub name: String,
-    pub grad: Option<Tensor>, // Shouldn't grad be ties to operation?
-}
-
-impl Default for TensorData {
-    fn default() -> Self {
-        TensorData {
-            name: String::new(),
-            operation: GradientOperation::None,
-            last: None,
-            grad: None
-        }
-    }
-}
-
-impl TensorData {
-    pub fn wrap(self) -> Rc<RefCell<TensorData>> {
-        Rc::new(RefCell::new(self))
-    }
-}
-
+use crate::operations::Gradient;
 
 pub struct Tensor {
+    pub name: String,
     pub data: Vec<Vec<f64>>,
-    pub metadata: Rc<RefCell<TensorData>>,
+    pub gradient: Rc<RefCell<Gradient>>,
 }
 
 // Housekeeping
 impl Default for Tensor {
     fn default() -> Tensor {
         Tensor {
+            name: String::new(),
             data: vec![vec![0.0]],
-            metadata: TensorData::default().wrap(),
+            gradient: Gradient::default().wrap(),
         }
     }
 }
@@ -50,22 +26,15 @@ impl Default for Tensor {
 // TODO: clean up this dumping ground
 #[allow(dead_code)]
 impl Tensor {
-    pub fn backward(&self) {
-        let binding = self.metadata();
-        let metadata = binding.borrow_mut();
-        metadata.backward();
-    }
 
     pub fn grad(&self) -> Tensor {
-        let binding = self.metadata();
-        let metadata = binding.borrow_mut();
-        metadata.grad().clone()
+        let gradient = self.gradient.borrow();
+        gradient.value.clone()
     }
 
     pub fn set_grad(&self, grad: Tensor) {
-        let binding = self.metadata();
-        let mut metadata = binding.borrow_mut();
-        metadata.grad = Some(grad);
+        let mut gradient = self.gradient.borrow_mut();
+        gradient.value = grad;
     }
 
     pub fn with_grad(self) -> Self {
@@ -73,27 +42,19 @@ impl Tensor {
         self
     }
 
-    pub fn named(self, name: String) -> Self {
-        let binding = self.metadata();
-        let mut metadata = binding.borrow_mut();
-        metadata.name = name;
+    pub fn named(mut self, name: String) -> Self {
+        self.name = name;
         self
     }
 
-    pub fn name(&self) -> String {
-        let binding = self.metadata();
-        let metadata = binding.borrow_mut();
-        metadata.name.clone()
-    }
-
-    pub fn metadata(&self) -> Rc<RefCell<TensorData>> {
-        self.metadata.clone()
+    pub fn metadata(&self) -> Rc<RefCell<Gradient>> {
+        self.gradient.clone()
     }
 
     pub fn from_vector(data: Vec<Vec<f64>>) -> Tensor {
         Tensor {
             data: data.clone(),
-            metadata: TensorData::default().wrap(),
+            ..Tensor::default()
         }
     }
 
@@ -109,7 +70,7 @@ impl Tensor {
         let data = vec![vec![]];
         Tensor {
             data: data.clone(),
-            metadata: TensorData::default().wrap()
+            ..Tensor::default()
         }
     }
 
@@ -121,7 +82,7 @@ impl Tensor {
         let data = vec![vec![value; n]; m];
         Tensor {
             data: data.clone(),
-            metadata: TensorData::default().wrap()
+            ..Tensor::default()
         }
     }
 
