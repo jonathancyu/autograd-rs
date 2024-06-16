@@ -43,10 +43,11 @@ pub enum GradientOperation {
 }
 
 pub trait Differentiable {
-    fn with_grad(self) -> Self;
     fn grad(&self) -> Tensor;
+    fn with_grad(self) -> Self;
     fn set_grad(&self, grad: Tensor);
     fn add_grad(&self, grad: Tensor);
+
     fn last(&self) -> Tensor;
 
     fn backward(&self);
@@ -60,6 +61,7 @@ impl Differentiable for Tensor {
             None => {
                 let (m, n) = self.size();
                 gradient.value = Some(Tensor::zeros(m, n));
+                gradient.last = Some(Tensor::from_vector(self.data.clone()))
             },
         };
         self.clone() // TODO: is this bad?
@@ -86,23 +88,24 @@ impl Differentiable for Tensor {
     }
 
     fn backward(&self) {
-        let grad = self.grad().clone();
-        let gradient = self.gradient.borrow_mut();
+        let grad = self.grad();
+        let gradient = self.gradient.borrow();
+        println!("{}: grad is {}", self.name, grad.clone());
         match &gradient.operation {
             GradientOperation::None => {},
             GradientOperation::Neg(a) => {
                 // y = -a
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * -1
-                a.add_grad(-grad);
+                a.add_grad(-grad.clone());
                 a.backward();
             },
             GradientOperation::Add(a, b) => {
                 // y = a + b
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * 1
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * 1
-                a.add_grad(-grad.clone());
-                a.add_grad(-grad.clone());
+                a.add_grad(grad.clone());
                 a.backward();
+                b.add_grad(grad.clone());
                 b.backward();
             },
             GradientOperation::Sub(a, b) => {
@@ -110,8 +113,8 @@ impl Differentiable for Tensor {
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * 1
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * -1
                 a.add_grad(grad.clone());
-                b.add_grad(-grad.clone());
                 a.backward();
+                b.add_grad(-grad.clone());
                 b.backward();
             },
             GradientOperation::Mul(a, b) => {
@@ -121,11 +124,12 @@ impl Differentiable for Tensor {
                 let a_last = a.last();
                 let b_last = b.last();
                 a.add_grad(grad.clone() * b_last);
-                a.add_grad(grad.clone() * a_last);
                 a.backward();
+                b.add_grad(grad.clone() * a_last);
                 b.backward();
             },
         };
+        println!("{}: grad is now {}", self.name, grad);
     }
 
 }
@@ -154,7 +158,7 @@ impl<'a> Neg for &'a Tensor {
             name: self.name.clone(),
             data: data.clone(),
             gradient: Gradient {
-                last: Some(self.clone()),
+                last: Some(Tensor::from_vector(data)),
                 operation: GradientOperation::Neg(self.clone()),
                 value: Some(Tensor::fill(m, n, 0.0)),
             }.wrap(),
@@ -207,7 +211,7 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
             data: data.clone(),
             gradient: Gradient {
                 operation: GradientOperation::Add(self.clone(), right.clone()),
-                last: Some(self.clone()),
+                last: Some(Tensor::from_vector(data)),
                 value: Some(Tensor::fill(m, n, 0.0)),
             }.wrap(),
         }
@@ -239,7 +243,7 @@ impl<'a> Sub<&'a Tensor> for &'a Tensor {
             data: data.clone(),
             gradient: Gradient {
                 operation: GradientOperation::Add(self.clone(), right.clone()),
-                last: Some(self.clone()),
+                last: Some(Tensor::from_vector(data)),
                 value: Some(Tensor::fill(m, n, 0.0)),
             }.wrap(),
         }
@@ -278,9 +282,9 @@ impl<'a> Mul<&'a Tensor> for &'a Tensor {
             name: format!("({} * {})", self.name, right.name),
             data: data.clone(),
             gradient: Gradient {
-                last: Some(self.clone()),
+                operation: GradientOperation::Mul(self.clone(), right.clone()),
+                last: Some(Tensor::from_vector(data)),
                 value: Some(Tensor::fill(m, p, 0.0)),
-                ..Gradient::default()
             }.wrap(),
         }
 

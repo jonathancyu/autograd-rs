@@ -53,18 +53,22 @@ mod gradient_tests {
         // ---------
         // d = e + c
         // e.grad = dL/de = (dL/dd)(dd/de) = dL/dd * 1 = d.grad = -2
-        assert!(e.grad() == d.grad() && e.grad().item() == -2.0);
+        assert_eq!(e.grad(), d.grad());
+        assert_eq!(e.grad().item(), -2.0);
         // c.grad = dL/dc = (dL/dy)(dy/dd) = dL/dE * 1 = d.grad = -2
-        assert!(c.grad() == d.grad() && c.grad().item() == -2.0);
+        assert_eq!(c.grad(), d.grad());
+        assert_eq!(c.grad().item(), -2.0);
 
         // a = 1.0
         // b = 2.0
         // ---------
         // e = a * b
         // a.grad = dL/da = (dL/de)(de/da) = e.grad * b.last = -2 * 2 = -4
-        assert!(a.grad() == e.grad() * b.clone() && a.grad().item() == -4.0);
+        assert_eq!(a.grad(), e.grad() * b.clone());
+        assert_eq!(a.grad().item(), -4.0);
         // b.grad = dL/db = (dL/de)(de/db) = e.grad * a.last = -2 * 1 = -2
-        assert!(b.grad() == e.grad() * a.clone() && b.grad().item() == -2.0);
+        assert_eq!(b.grad(), e.grad() * a.clone());
+        assert_eq!(b.grad().item(), -2.0);
         //
     }
 }
