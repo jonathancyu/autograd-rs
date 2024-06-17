@@ -1,6 +1,31 @@
 #[cfg(test)]
 mod gradient_tests {
+    use core::f64;
+
     use llm_rs::{operations::Differentiable, tensor::Tensor};
+    #[test]
+    fn simple_gradient_decent() {
+        let m = 2.0;
+        let b = 13.0;
+        let range = 1..10;
+        let train: Vec<(Tensor, Tensor)> = range.map(|x| {
+            (Tensor::from_vector(vec!(vec![x as f64, 1.0])), Tensor::singleton(m * (x as f64) + b))
+        }).collect();
+
+        let weights = &Tensor::ones(2, 1).with_grad();
+
+        let num_epochs = 1;
+        for i in 0..num_epochs {
+            // Forward pass
+            for (x, y) in train.clone().into_iter() {
+                let y_pred = weights * &x;
+                let loss = y_pred - y;
+                println!("epoch: {}, loss: {}", i, loss.item());
+                loss.set_grad(Tensor::singleton(1.0));
+                loss.backward();
+            }
+        }
+    }
 
     #[test]
     fn small_computation_graph() {
@@ -71,4 +96,5 @@ mod gradient_tests {
         assert_eq!(b.grad().item(), -2.0);
         //
     }
+
 }
