@@ -4,11 +4,12 @@ use std::fmt::{Debug, Display};
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
 
-use crate::operations::Gradient;
+use crate::operations::{Differentiable, Gradient};
 
 pub struct Tensor {
     pub name: String,
     pub data: Vec<Vec<f64>>,
+    pub size: (usize, usize),
     pub gradient: Rc<RefCell<Gradient>>,
 }
 
@@ -18,6 +19,7 @@ impl Default for Tensor {
         Tensor {
             name: String::new(),
             data: vec![vec![0.0]],
+            size: (1, 1),
             gradient: Gradient::default().wrap(),
         }
     }
@@ -38,22 +40,20 @@ impl Tensor {
     pub fn from_vector(data: Vec<Vec<f64>>) -> Tensor {
         Tensor {
             data: data.clone(),
+            size: Tensor::get_size(&data),
             ..Tensor::default()
         }
     }
 
     pub fn from_array(array: &[&[f64]]) -> Tensor {
-        Tensor::from_vector(
-            array.iter().map(|&row| {
-                row.to_vec()
-            }).collect::<Vec<_>>(),
-        )
+        Tensor::from_vector(array.iter().map(|&row| row.to_vec()).collect::<Vec<_>>())
     }
 
     pub fn empty() -> Tensor {
         let data = vec![vec![]];
         Tensor {
             data: data.clone(),
+            size: (1, 0), // TODO: ..?
             ..Tensor::default()
         }
     }
@@ -64,10 +64,7 @@ impl Tensor {
 
     pub fn fill(m: usize, n: usize, value: f64) -> Tensor {
         let data = vec![vec![value; n]; m];
-        Tensor {
-            data: data.clone(),
-            ..Tensor::default()
-        }
+        Tensor::from_vector(data)
     }
 
     pub fn zeros(m: usize, n: usize) -> Tensor {
@@ -78,7 +75,7 @@ impl Tensor {
     }
 
     pub fn item(&self) -> f64 {
-        match self.size() {
+        match self.size {
             (1, 1) => self[0][0],
             _ => panic!("Cannot call item() on a tensor with non-unit size"),
         }
@@ -100,7 +97,7 @@ impl Tensor {
     // }
 
     pub fn pow(&self, rhs: i32) -> Tensor {
-        let (m, n) = self.size();
+        let (m, n) = self.size;
         let mut data = vec![vec![0.0; n]; m];
         for i in 0..m {
             for j in 0..n {
@@ -111,8 +108,7 @@ impl Tensor {
         Tensor::from_vector(data)
     }
 
-    pub fn size(&self) -> (usize, usize) {
-        let data = &self.data;
+    fn get_size(data: &[Vec<f64>]) -> (usize, usize) {
         match data.is_empty() {
             true => (0, 0),
             false => match data[0].is_empty() {
@@ -123,7 +119,7 @@ impl Tensor {
     }
 
     pub fn transpose(&self) -> Tensor {
-        let (m, n) = self.size();
+        let (m, n) = self.size;
         let mut data = vec![vec![0.0; m]; n];
 
         // TODO: how to do this with apply?
@@ -138,7 +134,7 @@ impl Tensor {
 
     pub fn apply(&self, fun: fn(usize, usize, &Tensor) -> f64) -> Tensor {
         // TODO: make this work for N-dimensional tensors
-        let (m, n) = self.size();
+        let (m, n) = self.size;
         let mut data = vec![vec![0.0; n]; m];
 
         (0..m).for_each(|i| {
@@ -153,7 +149,7 @@ impl Tensor {
 
 impl Clone for Tensor {
     fn clone(&self) -> Self {
-        let (m, n) = self.size();
+        let (m, n) = self.size;
         let mut data = vec![vec![0.0; n]; m];
         for i in 0..m {
             for j in 0..n {
@@ -162,15 +158,16 @@ impl Clone for Tensor {
         }
         Tensor {
             data: self.data.clone(),
+            size: (m, n),
             name: self.name.clone(),
-            gradient: Rc::clone(&self.gradient)
+            gradient: Rc::clone(&self.gradient),
         }
     }
 }
 
 impl IndexMut<usize> for Tensor {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        let (m, _n) = self.size();
+        let (m, _n) = self.size;
         assert!(index < m, "Index out of bounds");
         &mut self.data[index]
     }
@@ -179,16 +176,16 @@ impl IndexMut<usize> for Tensor {
 impl Index<usize> for Tensor {
     type Output = Vec<f64>;
     fn index(&self, index: usize) -> &Vec<f64> {
-        let (m, _n) = self.size();
+        let (m, _n) = self.size;
         assert!(index < m, "Index out of bounds");
         &self.data[index]
     }
 }
 
-
 impl Debug for Tensor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let result = self.data
+        let result = self
+            .data
             .iter()
             .map(|row| {
                 row.iter()
@@ -206,7 +203,8 @@ impl Debug for Tensor {
 
 impl Display for Tensor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let result = self.data
+        let result = self
+            .data
             .iter()
             .map(|row| {
                 row.iter()

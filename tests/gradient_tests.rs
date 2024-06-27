@@ -3,22 +3,39 @@ mod gradient_tests {
     use core::f64;
 
     use llm_rs::{operations::Differentiable, tensor::Tensor};
+
+    #[derive(Clone)]
+    struct TestData {
+        input: Tensor,
+        output: Tensor,
+    }
+
     #[test]
     fn simple_gradient_decent() {
         let m = 2.0;
         let b = 13.0;
         let range = 1..10;
-        let train: Vec<(Tensor, Tensor)> = range.map(|x| {
-            (Tensor::from_vector(vec!(vec![x as f64, 1.0])), Tensor::singleton(m * (x as f64) + b))
-        }).collect();
+        let train: Vec<TestData> = range
+            .map(|x| {
+                let x = x as f64;
+                TestData {
+                    input: Tensor::singleton(x).with_grad(),
+                    output: Tensor::singleton(m * x + b).with_grad(),
+                }
+            })
+            .collect();
 
-        let weights = &Tensor::ones(2, 1).with_grad();
+        // TODO: add resetting grad to 0
+        let weights = &Tensor::fill(1, 1, 1.0).with_grad();
+        let bias = &Tensor::fill(1, 1, 1.0).with_grad();
 
-        let num_epochs = 1;
+        let num_epochs = 10;
         for i in 0..num_epochs {
             // Forward pass
-            for (x, y) in train.clone().into_iter() {
-                let y_pred = weights * &x;
+            for sample in train.clone().into_iter() {
+                let (x, y) = (sample.input, sample.output);
+                let product = weights * &x;
+                let y_pred = &product + &bias;
                 let loss = y_pred - y;
                 println!("epoch: {}, loss: {}", i, loss.item());
                 loss.set_grad(Tensor::singleton(1.0));
@@ -53,6 +70,14 @@ mod gradient_tests {
         let e_val = e.item();
         assert_eq!(2.0, e_val);
 
+        // Assert correct last value
+        let y_val = y.last().item();
+        assert_eq!(-24.0, y_val);
+        let d_val = d.last().item();
+        assert_eq!(12.0, d_val);
+        let e_val = e.last().item();
+        assert_eq!(2.0, e_val);
+
         // Propogate gradient
         y.set_grad(Tensor::singleton(1.0));
         y.backward();
@@ -67,7 +92,7 @@ mod gradient_tests {
         assert_eq!(d_grad, f.clone() * y.grad());
         assert_eq!(d_grad.item(), -2.0);
         // f.grad = dL/df = (dL/dy)(dy/df) = y.grad * d.last = 1 * 12 = 12
-        let f_grad =  f.grad();
+        let f_grad = f.grad();
         assert_eq!(f_grad, d.clone() * y.grad());
         assert_eq!(f_grad.item(), 12.0);
 
@@ -96,5 +121,4 @@ mod gradient_tests {
         assert_eq!(b.grad().item(), -2.0);
         //
     }
-
 }
