@@ -130,4 +130,15 @@ mod tensor_tests {
 
         assert_eq!(expected, result);
     }
+
+    #[test]
+    fn addassign_modifies_inplace() {
+        let mut a = Tensor::fill(2, 2, 3.0);
+        let b = Tensor::fill(2, 2, -1.0);
+        let expected = Tensor::fill(2, 2, 2.0);
+
+        a += &b;
+
+        assert_eq!(expected, a);
+    }
 }

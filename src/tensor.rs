@@ -1,7 +1,7 @@
 use core::{f64, panic};
 use std::cell::RefCell;
 use std::fmt::{Debug, Display};
-use std::ops::{Index, IndexMut};
+use std::ops::{AddAssign, Index, IndexMut};
 use std::rc::Rc;
 
 use crate::operations::Gradient;
@@ -179,6 +179,14 @@ impl Index<usize> for Tensor {
         let (m, _n) = self.size;
         assert!(index < m, "Index out of bounds");
         &self.data[index]
+    }
+}
+
+impl AddAssign<&Tensor> for Tensor {
+    fn add_assign(&mut self, right: &Tensor) {
+        assert_eq!(self.size, right.size, "Sizes must be equal");
+        let (m, n) = self.size;
+        (0..m).for_each(|i| (0..n).for_each(|j| self.data[i][j] += right[i][j]));
     }
 }
 
