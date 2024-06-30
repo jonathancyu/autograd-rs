@@ -54,10 +54,11 @@ mod tensor_tests {
     #[test]
     fn neg_returns_negative_value() {
         let a = Tensor::fill(2, 2, 2.0);
-
         let expected = Tensor::fill(2, 2, -2.0);
 
-        assert_eq!(expected, -a);
+        let result = -a;
+
+        assert_eq!(expected, result);
     }
 
     #[test]

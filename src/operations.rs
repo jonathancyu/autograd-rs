@@ -12,6 +12,24 @@ pub struct Gradient {
     pub value: Option<Tensor>, // Shouldn't grad be ties to operation?
 }
 
+fn format_name(tensor: &Tensor) -> String {
+    if !tensor.name.is_empty() {
+        return tensor.name.clone();
+    }
+    tensor.to_string()
+}
+
+fn unary_label(operation: String, tensor: &Tensor) -> String {
+    let tensor = format_name(tensor);
+    format!("({} {})", operation, tensor)
+}
+
+fn binary_label(left: &Tensor, operation: String, right: &Tensor) -> String {
+    let left = format_name(left);
+    let right = format_name(right);
+    format!("({} {} {})", left, operation, right)
+}
+
 impl Default for Gradient {
     fn default() -> Self {
         Gradient {
@@ -102,19 +120,11 @@ impl Differentiable for Tensor {
     fn backward(&self) {
         let grad = self.grad();
         let gradient = self.gradient.borrow();
-        println!(
-            "name {}, op: {:?}, grad is {}",
-            self.name,
-            gradient.operation,
-            grad.clone()
-        );
         match &gradient.operation {
             GradientOperation::None => {}
             GradientOperation::Neg(a) => {
                 // y = -a
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * -1
-                let a_last = a.last();
-                println!("a: {}", a_last);
                 a.add_grad(-grad.clone());
                 a.backward();
             }
@@ -122,9 +132,6 @@ impl Differentiable for Tensor {
                 // y = a + b
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * 1
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * 1
-                let a_last = a.last();
-                let b_last = b.last();
-                println!("a: {}, b: {}", a_last, b_last);
                 a.add_grad(grad.clone());
                 a.backward();
                 b.add_grad(grad.clone());
@@ -134,9 +141,6 @@ impl Differentiable for Tensor {
                 // y = a - b
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * 1
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * -1
-                let a_last = a.last();
-                let b_last = b.last();
-                println!("a: {}, b: {}", a_last, b_last);
                 a.add_grad(grad.clone());
                 a.backward();
                 b.add_grad(-grad.clone());
@@ -148,7 +152,6 @@ impl Differentiable for Tensor {
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * a
                 let a_last = a.last();
                 let b_last = b.last();
-                println!("a: {}, b: {}", a_last, b_last);
                 a.add_grad(grad.clone() * b_last);
                 a.backward();
                 b.add_grad(grad.clone() * a_last);
@@ -180,7 +183,7 @@ impl<'a> Neg for &'a Tensor {
         }
 
         Tensor {
-            name: self.name.clone(),
+            name: unary_label("-".to_string(), self),
             data: data.clone(),
             size: (m, n),
             gradient: Gradient {
@@ -233,7 +236,7 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
         }
 
         Tensor {
-            name: format!("({} + {})", self.name, right.name),
+            name: binary_label(self, "+".to_string(), right),
             data: data.clone(),
             size: (m, n),
             gradient: Gradient {
@@ -270,7 +273,7 @@ impl<'a> Sub<&'a Tensor> for &'a Tensor {
         }
 
         Tensor {
-            name: format!("({} - {})", self.name, right.name),
+            name: binary_label(self, "-".to_string(), right),
             data: data.clone(),
             size: (m, n),
             gradient: Gradient {
@@ -312,7 +315,7 @@ impl<'a> Mul<&'a Tensor> for &'a Tensor {
         }
 
         Tensor {
-            name: format!("({} * {})", self.name, right.name),
+            name: binary_label(self, "*".to_string(), right),
             data: data.clone(),
             size: (m, p),
             gradient: Gradient {

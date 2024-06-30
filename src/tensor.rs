@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display};
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
 
-use crate::operations::{Differentiable, Gradient};
+use crate::operations::Gradient;
 
 pub struct Tensor {
     pub name: String,
@@ -184,20 +184,7 @@ impl Index<usize> for Tensor {
 
 impl Debug for Tensor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let result = self
-            .data
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|&x| x.to_string())
-                    .collect::<Vec<String>>()
-                    .join(" ")
-            })
-            .collect::<Vec<String>>()
-            .join("\n");
-
-        writeln!(f, "{}", result)?;
-        Ok(())
+        self::Display::fmt(&self, f)
     }
 }
 
