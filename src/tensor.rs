@@ -70,8 +70,14 @@ impl Tensor {
     pub fn zeros(m: usize, n: usize) -> Tensor {
         Tensor::fill(m, n, 0.0)
     }
+
     pub fn ones(m: usize, n: usize) -> Tensor {
         Tensor::fill(m, n, 1.0)
+    }
+
+    pub fn num_elements(&self) -> i32 {
+        let (m, n) = self.size;
+        (m as i32) * (n as i32)
     }
 
     pub fn item(&self) -> f64 {

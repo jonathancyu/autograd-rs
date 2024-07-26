@@ -2,6 +2,7 @@ use std::{
     cell::RefCell,
     ops::{Add, AddAssign, Mul, Neg, Sub, SubAssign},
     rc::Rc,
+    vec,
 };
 
 use crate::tensor::Tensor;
@@ -58,6 +59,8 @@ pub enum GradientOperation {
     None,
     Neg(Tensor),
     ReLU(Tensor),
+    Pow(Tensor, i32),
+    Mean(Tensor),
     Add(Tensor, Tensor),
     Sub(Tensor, Tensor),
     Mul(Tensor, Tensor),
@@ -73,7 +76,10 @@ pub trait Differentiable {
 
     fn backward(&self);
 
+    // TODO: move these elsewhere
     fn relu(&self) -> Tensor;
+    fn mean(&self) -> Tensor;
+    fn pow(&self, exp: i32) -> Tensor;
 }
 
 impl Differentiable for Tensor {
@@ -168,6 +174,19 @@ impl Differentiable for Tensor {
                     a_last.apply(|i, j, last| if last[i][j] >= 0.0 { grad[i][j] } else { 0.0 }),
                 )
             }
+            GradientOperation::Pow(a, b) => {
+                // y = a^b
+                // dy/da = ba^(b-1)
+                let a_last = a.last();
+                a.add_grad(a_last.apply(|i, j, last| (*b as f64) * last[i][j].powf((b - 1) as f64)))
+            }
+            GradientOperation::Mean(a) => {
+                // y = mean(a)
+                // dy/da = ba^(b-1)
+                let a_last = a.last();
+                let denominator = a_last.num_elements() as f64;
+                a.add_grad(a_last.apply(|i, j, last| last[i][j] / denominator ))
+            }
         };
     }
 
@@ -190,6 +209,47 @@ impl Differentiable for Tensor {
             gradient: Gradient {
                 last: Some(Tensor::from_vector(data)),
                 operation: GradientOperation::ReLU(self.clone()),
+                value: Some(Tensor::fill(m, n, 0.0)),
+            }
+            .wrap(),
+        }
+    }
+
+    fn mean(&self) -> Tensor {
+        let (m, n) = self.size;
+        let mut sum = 0.0;
+        (0..m).for_each(|i| (0..n).for_each(|j| sum += self.data[i][j]));
+        let data = vec![vec![sum / (self.num_elements() as f64)]];
+
+        Tensor {
+            name: unary_label("Mean".to_string(), self),
+            data: data.clone(),
+            size: (m, n),
+            gradient: Gradient {
+                last: Some(Tensor::from_vector(data)),
+                operation: GradientOperation::Mean(self.clone()),
+                value: Some(Tensor::fill(m, n, 0.0)),
+            }
+            .wrap(),
+        }
+    }
+
+    fn pow(&self, exp: i32) -> Tensor {
+        let (m, n) = self.size;
+        let mut data = vec![vec![0.0; n]; m];
+        (0..m).for_each(|i| {
+            (0..n).for_each(|j| {
+                data[i][j] = self.data[i][j].powi(exp);
+            })
+        });
+
+        Tensor {
+            name: format!("({}^{})", format_name(self), exp),
+            data: data.clone(),
+            size: (m, n),
+            gradient: Gradient {
+                last: Some(Tensor::from_vector(data)),
+                operation: GradientOperation::Pow(self.clone(), exp),
                 value: Some(Tensor::fill(m, n, 0.0)),
             }
             .wrap(),

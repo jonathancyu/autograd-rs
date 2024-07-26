@@ -11,7 +11,7 @@ mod gradient_tests {
     }
 
     #[test]
-    fn simple_gradient_decent() {
+    fn simple_gradient_descent() {
         let m = 2.0;
         let b = 13.0;
         let range = 1..10;
@@ -38,8 +38,8 @@ mod gradient_tests {
                 bias.set_grad(Tensor::singleton(0.0));
                 let (x, y) = (sample.input, sample.output);
                 let product = &*weights * &x;
-                let y_pred = (&product + bias).relu();
-                let loss = y_pred - y;
+                let y_pred = &product + bias;
+                let loss = (y_pred - y).pow(2).mean();
                 loss.set_grad(Tensor::singleton(1.0));
                 loss.backward(); // Backpropogate gradient
 
