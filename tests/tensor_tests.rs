@@ -134,10 +134,21 @@ mod tensor_tests {
     #[test]
     fn addassign_modifies_inplace() {
         let mut a = Tensor::fill(2, 2, 3.0);
-        let b = Tensor::fill(2, 2, -1.0);
-        let expected = Tensor::fill(2, 2, 2.0);
+        let b = Tensor::fill(2, 2, 1.0);
+        let expected = Tensor::fill(2, 2, 4.0);
 
         a += &b;
+
+        assert_eq!(expected, a);
+    }
+
+    #[test]
+    fn subassign_modifies_inplace() {
+        let mut a = Tensor::fill(2, 2, 3.0);
+        let b = Tensor::fill(2, 2, 1.0);
+        let expected = Tensor::fill(2, 2, 2.0);
+
+        a -= &b;
 
         assert_eq!(expected, a);
     }

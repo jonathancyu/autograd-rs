@@ -57,6 +57,7 @@ pub enum Parents {
 pub enum GradientOperation {
     None,
     Neg(Tensor),
+    ReLU(Tensor),
     Add(Tensor, Tensor),
     Sub(Tensor, Tensor),
     Mul(Tensor, Tensor),
@@ -71,6 +72,8 @@ pub trait Differentiable {
     fn last(&self) -> Tensor;
 
     fn backward(&self);
+
+    fn relu(&self) -> Tensor;
 }
 
 impl Differentiable for Tensor {
@@ -157,8 +160,40 @@ impl Differentiable for Tensor {
                 b.add_grad(grad.clone() * a_last);
                 b.backward();
             }
+            GradientOperation::ReLU(a) => {
+                // y = [ x >= 0: x, x < 0: 0 ]
+                // dy/dx = [x >= 0: 1, x < 0: 0]
+                let a_last = a.last();
+                a.add_grad(
+                    a_last.apply(|i, j, last| if last[i][j] >= 0.0 { grad[i][j] } else { 0.0 }),
+                )
+            }
         };
-        println!("{}: grad is now {}", self.name, grad);
+    }
+
+    fn relu(&self) -> Tensor {
+        let (m, n) = self.size;
+        let mut data = vec![vec![0.0; n]; m];
+        (0..m).for_each(|i| {
+            (0..n).for_each(|j| {
+                data[i][j] = match self.data[i][j] {
+                    x if x >= 0.0 => x,
+                    _ => 0.0,
+                }
+            })
+        });
+
+        Tensor {
+            name: unary_label("ReLU".to_string(), self),
+            data: data.clone(),
+            size: (m, n),
+            gradient: Gradient {
+                last: Some(Tensor::from_vector(data)),
+                operation: GradientOperation::ReLU(self.clone()),
+                value: Some(Tensor::fill(m, n, 0.0)),
+            }
+            .wrap(),
+        }
     }
 }
 
@@ -333,6 +368,41 @@ impl Mul<Tensor> for Tensor {
 
     fn mul(self, right: Tensor) -> Self::Output {
         &self * &right
+    }
+}
+
+impl Mul<f64> for Tensor {
+    type Output = Tensor;
+
+    fn mul(self, right: f64) -> Self::Output {
+        &self * right
+    }
+}
+impl Mul<f64> for &Tensor {
+    type Output = Tensor;
+
+    fn mul(self, right: f64) -> Self::Output {
+        let (m, n) = self.size;
+        let mut data = vec![vec![0.0; n]; m];
+        for i in 0..m {
+            for j in 0..n {
+                data[i][j] += self[i][j] * right;
+            }
+        }
+
+        Tensor {
+            data: data.clone(),
+            size: (m, n),
+            ..Tensor::default()
+        }
+    }
+}
+
+impl Mul<Tensor> for f64 {
+    type Output = Tensor;
+
+    fn mul(self, rhs: Tensor) -> Self::Output {
+        rhs * self
     }
 }
 

@@ -26,22 +26,61 @@ mod gradient_tests {
             .collect();
 
         // TODO: add resetting grad to 0
-        let weights = &Tensor::fill(1, 1, 1.0).with_grad();
-        let bias = &Tensor::fill(1, 1, 1.0).with_grad();
+        let weights = &mut Tensor::fill(1, 1, 1.0).with_grad();
+        let bias = &mut Tensor::fill(1, 1, 1.0).with_grad();
 
-        let num_epochs = 10;
+        let learning_rate = 0.01;
+        let num_epochs = 1000;
         for i in 0..num_epochs {
             // Forward pass
             for sample in train.clone().into_iter() {
+                weights.set_grad(Tensor::singleton(0.0));
+                bias.set_grad(Tensor::singleton(0.0));
                 let (x, y) = (sample.input, sample.output);
-                let product = weights * &x;
-                let y_pred = &product + &bias;
+                let product = &*weights * &x;
+                let y_pred = (&product + bias).relu();
                 let loss = y_pred - y;
-                println!("epoch: {}, loss: {}", i, loss.item());
                 loss.set_grad(Tensor::singleton(1.0));
-                loss.backward();
+                loss.backward(); // Backpropogate gradient
+
+                // Weight update rule
+                let weight_update = learning_rate * weights.grad();
+                *weights -= &weight_update;
+                let bias_update = learning_rate * bias.grad();
+                *bias -= &bias_update;
+            }
+            if i % 100 == 0 {
+                println!("epoch: {}, weights: {}, bias: {}", i, weights, bias);
             }
         }
+
+        assert_eq!((weights.item(), bias.item()), (m, b));
+    }
+
+    #[test]
+    fn relu_grad() {
+        let a_val = 2.0;
+        let b_val = -3.0;
+
+        let a = Tensor::singleton(a_val).with_grad();
+        let b = Tensor::singleton(b_val).with_grad();
+
+        let c = a.relu();
+        let d = b.relu();
+
+        println!("{}, {}", a.last(), b.last());
+
+        assert_eq!(2.0, c.item());
+        assert_eq!(0.0, d.item());
+
+        c.set_grad(Tensor::singleton(2.0));
+        c.backward();
+        d.set_grad(Tensor::singleton(2.0));
+        d.backward();
+
+        println!("{}, {}", a.grad(), b.grad());
+        assert_eq!(2.0, a.grad().item());
+        assert_eq!(0.0, b.grad().item());
     }
 
     #[test]
