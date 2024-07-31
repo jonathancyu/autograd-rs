@@ -136,6 +136,7 @@ impl Differentiable for Tensor {
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * -1
                 a.add_grad(-grad.clone());
                 a.backward();
+                // println!("{}: {}", a.name, a.grad());
             }
             GradientOperation::Add(a, b) => {
                 // y = a + b
@@ -145,6 +146,7 @@ impl Differentiable for Tensor {
                 a.backward();
                 b.add_grad(grad.clone());
                 b.backward();
+                // println!("{}: {}, {}: {}", a.name, a.grad(), b.name, b.grad());
             }
             GradientOperation::Sub(a, b) => {
                 // y = a - b
@@ -154,6 +156,7 @@ impl Differentiable for Tensor {
                 a.backward();
                 b.add_grad(-grad.clone());
                 b.backward();
+                // println!("{}: {}, {}: {}", a.name, a.grad(), b.name, b.grad());
             }
             GradientOperation::Mul(a, b) => {
                 // y = a * b
@@ -165,6 +168,7 @@ impl Differentiable for Tensor {
                 a.backward();
                 b.add_grad(grad.clone() * a_last);
                 b.backward();
+                // println!("{}: {}, {}: {}", a.name, a.grad(), b.name, b.grad());
             }
             GradientOperation::ReLU(a) => {
                 // y = [ x >= 0: x, x < 0: 0 ]
@@ -172,20 +176,28 @@ impl Differentiable for Tensor {
                 let a_last = a.last();
                 a.add_grad(
                     a_last.apply(|i, j, last| if last[i][j] >= 0.0 { grad[i][j] } else { 0.0 }),
-                )
+                );
+                // println!("{}: {}", a.name, a.grad());
+                a.backward();
             }
             GradientOperation::Pow(a, b) => {
                 // y = a^b
                 // dy/da = ba^(b-1)
                 let a_last = a.last();
-                a.add_grad(a_last.apply(|i, j, last| (*b as f64) * last[i][j].powf((b - 1) as f64)))
+                a.add_grad(
+                    a_last.apply(|i, j, last| (*b as f64) * last[i][j].powf((b - 1) as f64)),
+                );
+                // println!("{}: {}, b: {}", a.name, a.grad(), b);
+                a.backward();
             }
             GradientOperation::Mean(a) => {
                 // y = mean(a)
                 // dy/da = ba^(b-1)
                 let a_last = a.last();
                 let denominator = a_last.num_elements() as f64;
-                a.add_grad(a_last.apply(|i, j, last| last[i][j] / denominator ))
+                a.add_grad(a_last.apply(|i, j, last| last[i][j] / denominator));
+                // println!("{}: {}", a.name, a.grad());
+                a.backward();
             }
         };
     }

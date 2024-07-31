@@ -102,18 +102,6 @@ impl Tensor {
     //     result
     // }
 
-    pub fn pow(&self, rhs: i32) -> Tensor {
-        let (m, n) = self.size;
-        let mut data = vec![vec![0.0; n]; m];
-        for i in 0..m {
-            for j in 0..n {
-                data[i][j] = self[i][j].powi(rhs);
-            }
-        }
-
-        Tensor::from_vector(data)
-    }
-
     fn get_size(data: &[Vec<f64>]) -> (usize, usize) {
         match data.is_empty() {
             true => (0, 0),
