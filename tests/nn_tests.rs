@@ -2,7 +2,11 @@ mod nn_tests {
 
     use approx::assert_relative_eq;
     use llm_rs::{
-        data::TestData, nn::{Linear, Module}, operations::Differentiable, optimizer::{Optimizer, StochasticGradientDescent}, tensor::Tensor
+        data::TestData,
+        nn::{Linear, Model, Module},
+        operations::Differentiable,
+        optimizer::{Optimizer, StochasticGradientDescent},
+        tensor::Tensor,
     };
     #[test]
     fn learn_linear_equation() {
@@ -20,26 +24,28 @@ mod nn_tests {
             .collect();
         let learning_rate = 0.01;
 
-        let layer = Linear::new((2, 1));
-        let optimizer = StochasticGradientDescent::new(learning_rate, layer.parameters());
+        let layer = Linear::new(1, 1);
+        let model = Model::new(vec![Box::new(layer)]);
+        let optimizer = StochasticGradientDescent::new(learning_rate, model.parameters());
 
         let num_epochs = 500;
         for _ in 0..num_epochs {
             for sample in train.clone().into_iter() {
-                layer.reset_grad();
+                model.reset_grad();
                 // Forward pass
                 let (x, y) = (sample.input, sample.output);
-                let y_pred = layer.forward(x);
+                let y_pred = model.forward(x);
 
                 // Backward pass
                 let loss = Differentiable::pow(&(y_pred - y.clone()), 2);
-                layer.backward(loss);
-
+                model.backward(loss);
 
                 // Weight update rule
                 optimizer.step();
             }
         }
+
+        let layer = model.layers[0].as_any().downcast_ref::<Linear>().unwrap();
 
         let (weights, bias) = (layer.weights.clone(), layer.bias.clone());
         let weights: &Tensor = &weights.borrow();
@@ -48,5 +54,56 @@ mod nn_tests {
 
         assert_relative_eq!(weights.item(), m, max_relative = 1e-5);
         assert_relative_eq!(bias.item(), b, max_relative = 1e-5);
+    }
+
+    fn create_data(x_1: i8, x_2: i8, y: i8) -> TestData {
+        TestData {
+            input: Tensor::from_vector(vec![vec![x_1.into(), x_2.into()]]),
+            output: Tensor::singleton(y.into()),
+        }
+    }
+
+    #[test]
+    fn multi_layer_network() {
+        let train: Vec<TestData> = vec![
+            create_data(0, 0, 1),
+            create_data(0, 1, 0),
+            create_data(1, 0, 1),
+            create_data(0, 0, 0),
+        ];
+        let learning_rate = 0.01;
+
+        let model = Model::new(vec![
+            Box::new(Linear::new(2, 2)),
+            Box::new(Linear::new(2, 1)),
+        ]);
+        let optimizer = StochasticGradientDescent::new(learning_rate, model.parameters());
+
+        let num_epochs = 500;
+        for _ in 0..num_epochs {
+            for sample in train.clone().into_iter() {
+                model.reset_grad();
+                // Forward pass
+                let (x, y) = (sample.input, sample.output);
+                let y_pred = model.forward(x);
+
+                // Backward pass
+                let loss = Differentiable::pow(&(y_pred - y.clone()), 2);
+                model.backward(loss);
+
+                // Weight update rule
+                optimizer.step();
+            }
+        }
+
+
+        for sample in train.clone().into_iter() {
+            let (x, y) = (sample.input, sample.output);
+            let prediction = model.forward(x);
+            let (p, y) = (prediction.item(), y.item());
+            println!("pred: {}, actual: {}", p, y)
+
+            // assert_relative_eq!(prediction.item(), y.item(), max_relative = 1e-5);
+        }
     }
 }

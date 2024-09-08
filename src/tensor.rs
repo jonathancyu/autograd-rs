@@ -204,15 +204,18 @@ impl Display for Tensor {
             .data
             .iter()
             .map(|row| {
-                row.iter()
-                    .map(|&x| x.to_string())
-                    .collect::<Vec<String>>()
-                    .join(" ")
+                format!(
+                    "[{}]",
+                    row.iter()
+                        .map(|&x| x.to_string())
+                        .collect::<Vec<String>>()
+                        .join(" ")
+                )
             })
             .collect::<Vec<String>>()
-            .join("\n");
+            .join(" ");
 
-        writeln!(f, "{}", result)?;
+        write!(f, "[{}]", result)?;
         Ok(())
     }
 }

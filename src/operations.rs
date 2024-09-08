@@ -336,7 +336,8 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
     type Output = Tensor;
     fn add(self, right: &'a Tensor) -> Tensor {
         let (m, n) = self.size;
-        assert!((m, n) == right.size);
+        let (m_2, n_2) = right.size;
+        assert!((m, n) == right.size, "({}, {}) != ({}, {})", m, n, m_2, n_2);
         let mut data = vec![vec![0.0; n]; m];
         for i in 0..m {
             for j in 0..n {
@@ -412,7 +413,7 @@ impl<'a> Mul<&'a Tensor> for &'a Tensor {
 
         // [m x n_1][n_2 x p] => [m x p]
         if n_1 != n_2 {
-            panic!("Incompatible dimensions: [{m} x {n_1}][{n_2} x {p}], n_1 != n2")
+            panic!("Incompatible dimensions: [{m} x n_1: {n_1}][n_2: {n_2} x {p}], n_1 != n_2")
         }
         let mut data = vec![vec![0.0; p]; m];
 
