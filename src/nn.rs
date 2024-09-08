@@ -1,23 +1,87 @@
-use crate::tensor::Tensor;
+use core::panic;
+use std::{cell::RefCell, rc::Rc};
 
-#[derive(Clone)]
-pub struct TestData {
-    pub input: Tensor,
-    pub output: Tensor,
-}
+use crate::{operations::Differentiable, tensor::Tensor};
 
-pub trait Layer {
-    fn apply(&self, input: Tensor) -> Tensor;
+pub trait Module {
+    fn forward(&self, input: Tensor) -> Tensor;
+    fn backward(&self, loss: Tensor);
+    fn reset_grad(&self);
 }
 
 pub struct Linear {
     size: (usize, usize),
-    weights: Tensor,
-    bias: Tensor,
+    pub weights: Rc<RefCell<Tensor>>,
+    pub bias: Rc<RefCell<Tensor>>,
 }
 
-impl Layer for Linear {
-    fn apply(&self, input: Tensor) -> Tensor {
-        todo!()
+impl Linear {
+    pub fn new(size: (usize, usize)) -> Linear {
+        let (height, width) = size;
+        if height <= 1 {
+            panic!("Height for linear layer should be greater than 1")
+        }
+        let weights = Tensor::ones(height - 1, width).with_grad();
+        let bias = Tensor::ones(1, width).with_grad();
+        Linear {
+            size: (height, width),
+weights: Rc::new(RefCell::new(weights)), bias: Rc::new(RefCell::new(bias))
+        }
+    }
+
+    pub fn parameters(&self) -> Vec<Rc<RefCell<Tensor>>> {
+        vec![self.weights.clone(), self.bias.clone()]
+    }
+}
+
+impl Module for Linear {
+    fn forward(&self, x: Tensor) -> Tensor {
+        // Forward pass
+        let weights = &*self.weights.borrow();
+        let bias = &*self.bias.borrow();
+        weights.set_grad(Tensor::singleton(0.0));
+        bias.set_grad(Tensor::singleton(0.0));
+        &(weights * &x) + bias
+    }
+
+    fn backward(&self, loss: Tensor) {
+        loss.set_grad(Tensor::singleton(1.0));
+        loss.backward();
+        // let weight_update = learning_rate * self.weights.grad();
+        // *self.weights -= &weight_update;
+        // let bias_update = learning_rate * self.bias.grad();
+        // *self.bias -= &bias_update;
+    }
+
+    fn reset_grad(&self) {
+        self.weights.borrow().set_grad(Tensor::singleton(0.0));
+        self.bias.borrow().set_grad(Tensor::singleton(0.0));
+    }
+}
+
+pub trait Optimizer {
+    fn step(&self);
+}
+
+pub struct StochasticGradientDescent {
+    learning_rate: f64,
+    parameters: Vec<Rc<RefCell<Tensor>>>,
+}
+impl StochasticGradientDescent {
+    pub fn new(learning_rate: f64, parameters: Vec<Rc<RefCell<Tensor>>>) -> StochasticGradientDescent {
+        StochasticGradientDescent {
+            learning_rate,
+            parameters
+        }
+    }
+}
+
+impl Optimizer for StochasticGradientDescent {
+    fn step(&self) {
+        self.parameters.clone().into_iter().for_each(|parameter| {
+            let mut parameter = parameter.borrow_mut();
+            let weight_update = self.learning_rate * parameter.grad();
+            *parameter -= &weight_update;
+        });
     }
 }

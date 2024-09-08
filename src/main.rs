@@ -1,4 +1,4 @@
-use llm_rs::{nn::TestData, operations::Differentiable, tensor::Tensor};
+use llm_rs::{data::TestData, operations::Differentiable, tensor::Tensor};
 
 fn main() {
     let m = -3.0;

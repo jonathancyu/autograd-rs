@@ -3,7 +3,7 @@ mod gradient_tests {
     use core::f64;
 
     use approx::assert_relative_eq;
-    use llm_rs::{nn::TestData, operations::Differentiable, tensor::Tensor};
+    use llm_rs::{data::TestData, operations::Differentiable, tensor::Tensor};
 
     #[test]
     fn simple_gradient_descent() {
