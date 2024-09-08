@@ -28,8 +28,7 @@ mod nn_tests {
         let optimizer = StochasticGradientDescent::new(learning_rate, layer.parameters());
 
         let num_epochs = 500;
-        for i in 0..num_epochs {
-            let mut last_loss = Tensor::empty();
+        for _ in 0..num_epochs {
             for sample in train.clone().into_iter() {
                 layer.reset_grad();
                 // Forward pass
