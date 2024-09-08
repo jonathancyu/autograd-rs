@@ -2,12 +2,8 @@ mod nn_tests {
 
     use approx::assert_relative_eq;
     use llm_rs::{
-        data::TestData,
-        nn::{Linear, Module, Optimizer, StochasticGradientDescent},
-        operations::Differentiable,
-        tensor::Tensor,
+        data::TestData, nn::{Linear, Module}, operations::Differentiable, optimizer::{Optimizer, StochasticGradientDescent}, tensor::Tensor
     };
-
     #[test]
     fn learn_linear_equation() {
         let m = -3.0;
