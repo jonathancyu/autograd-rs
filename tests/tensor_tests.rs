@@ -1,7 +1,7 @@
 #[cfg(test)]
 
 mod tensor_tests {
-    use llm_rs::tensor::Tensor;
+    use llm_rs::{operations::Differentiable, tensor::Tensor};
 
     #[test]
     fn from_vector_sets_size() {

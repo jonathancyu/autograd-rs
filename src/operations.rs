@@ -277,6 +277,7 @@ impl Neg for Tensor {
         -&self
     }
 }
+
 impl<'a> Neg for &'a Tensor {
     type Output = Tensor;
     fn neg(self) -> Tensor {
@@ -302,6 +303,7 @@ impl<'a> Neg for &'a Tensor {
         }
     }
 }
+
 // In-place non-gradient operations
 impl<'a> AddAssign<Tensor> for &'a mut Tensor {
     // NON-GRADIENT
@@ -355,6 +357,7 @@ impl<'a> Add<&'a Tensor> for &'a Tensor {
         }
     }
 }
+
 impl Add<Tensor> for Tensor {
     type Output = Tensor;
 
@@ -392,6 +395,7 @@ impl<'a> Sub<&'a Tensor> for &'a Tensor {
         }
     }
 }
+
 impl Sub<Tensor> for Tensor {
     type Output = Tensor;
 
@@ -450,6 +454,7 @@ impl Mul<f64> for Tensor {
         &self * right
     }
 }
+
 impl Mul<f64> for &Tensor {
     type Output = Tensor;
 
