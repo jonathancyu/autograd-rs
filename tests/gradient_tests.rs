@@ -62,21 +62,21 @@ mod gradient_tests {
         let bias = &mut Tensor::fill(1, 1, 1.0).with_grad();
 
         let learning_rate = 0.01;
-        let num_epochs = 1000;
+        let num_epochs = 500;
         for i in 0..num_epochs {
-            // Forward pass
             let mut last_loss = Tensor::empty();
             for sample in train.clone().into_iter() {
+                // Forward pass
                 weights.set_grad(Tensor::singleton(0.0));
                 bias.set_grad(Tensor::singleton(0.0));
                 let (x, y) = (sample.input, sample.output);
                 let y_pred = &(&*weights * &x) + bias;
-                // println!("product: {}", y_pred);
-                let y_pred_temp = &y_pred.clone();
+
+                // Backward pass
                 let loss = &Differentiable::pow(&(y_pred - y.clone()), 2);
                 last_loss = loss.clone();
                 loss.set_grad(Tensor::singleton(1.0));
-                loss.backward(); // Backpropogate gradient
+                loss.backward();
 
                 // Weight update rule
                 let weight_update = learning_rate * weights.grad();
