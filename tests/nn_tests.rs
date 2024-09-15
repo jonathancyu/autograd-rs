@@ -64,12 +64,12 @@ mod nn_tests {
     }
 
     #[test]
-    fn multi_layer_network() {
+    fn learn_xor() {
         let train: Vec<TestData> = vec![
-            create_data(0, 0, 1),
-            create_data(0, 1, 0),
-            create_data(1, 0, 1),
             create_data(0, 0, 0),
+            create_data(0, 1, 1),
+            create_data(1, 0, 1),
+            create_data(1, 1, 0),
         ];
         let learning_rate = 0.01;
 
@@ -89,13 +89,13 @@ mod nn_tests {
 
                 // Backward pass
                 let loss = Differentiable::pow(&(y_pred - y.clone()), 2);
+                println!("Loss: {}", loss.clone());
                 model.backward(loss);
 
                 // Weight update rule
                 optimizer.step();
             }
         }
-
 
         for sample in train.clone().into_iter() {
             let (x, y) = (sample.input, sample.output);
