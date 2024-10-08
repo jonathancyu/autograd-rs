@@ -48,8 +48,8 @@ impl Module for Linear {
         // Forward pass
         let weights = &*self.weights.borrow();
         let bias = &*self.bias.borrow();
-        weights.set_grad(Tensor::singleton(0.0));
-        bias.set_grad(Tensor::singleton(0.0));
+        weights.reset_grad();
+        bias.reset_grad();
         println!("x: {}", x);
         println!("w: {}", weights);
         let a = &(&x * weights);
@@ -80,7 +80,7 @@ impl Module for ReLU {
         input.relu()
     }
 
-    fn reset_grad(&self) { }
+    fn reset_grad(&self) {}
 
     fn parameters(&self) -> Vec<Rc<RefCell<Tensor>>> {
         vec![]

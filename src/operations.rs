@@ -71,6 +71,7 @@ pub trait Differentiable {
     fn grad(&self) -> Tensor;
     fn with_grad(self) -> Self;
     fn set_grad(&self, grad: Tensor);
+    fn reset_grad(&self);
     fn add_grad(&self, grad: Tensor);
 
     fn last(&self) -> Tensor;
@@ -103,6 +104,11 @@ impl Differentiable for Tensor {
             .clone()
             .expect("Tensor doesn't have grad enabled");
         value.clone()
+    }
+
+    fn reset_grad(&self) {
+        let (w, h) = self.size;
+        self.set_grad(Tensor::zeros(w, h));
     }
 
     fn set_grad(&self, grad: Tensor) {
