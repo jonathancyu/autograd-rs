@@ -1,4 +1,3 @@
-use core::panic;
 use std::{any::Any, cell::RefCell, rc::Rc};
 
 use crate::{operations::Differentiable, tensor::Tensor};
@@ -12,12 +11,23 @@ pub trait Module {
     fn reset_grad(&self);
     fn parameters(&self) -> Vec<Rc<RefCell<Tensor>>>;
     fn as_any(&self) -> &dyn Any;
+    fn get_name(&self) -> &'static str {
+        std::any::type_name::<Self>()
+    }
 }
 
 pub struct Linear {
     size: (usize, usize),
     pub weights: Rc<RefCell<Tensor>>,
     pub bias: Rc<RefCell<Tensor>>,
+}
+
+impl std::ops::Deref for Linear {
+    type Target = (usize, usize);
+
+    fn deref(&self) -> &Self::Target {
+        &self.size
+    }
 }
 
 impl Linear {
@@ -34,6 +44,7 @@ impl Linear {
 
 impl Module for Linear {
     fn forward(&self, x: Tensor) -> Tensor {
+        println!("FORWARD!");
         // Forward pass
         let weights = &*self.weights.borrow();
         let bias = &*self.bias.borrow();
@@ -41,11 +52,11 @@ impl Module for Linear {
         bias.set_grad(Tensor::singleton(0.0));
         println!("x: {}", x);
         println!("w: {}", weights);
-        let a =&(&x * weights);
+        let a = &(&x * weights);
         println!("wx: {}", a);
         println!("b: {}", bias);
         let b = a + bias;
-        println!("{}", a);
+        println!("{}", b);
         b
     }
 
@@ -56,6 +67,23 @@ impl Module for Linear {
 
     fn parameters(&self) -> Vec<Rc<RefCell<Tensor>>> {
         vec![self.weights.clone(), self.bias.clone()]
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+pub struct ReLU {}
+impl Module for ReLU {
+    fn forward(&self, input: Tensor) -> Tensor {
+        input.relu()
+    }
+
+    fn reset_grad(&self) { }
+
+    fn parameters(&self) -> Vec<Rc<RefCell<Tensor>>> {
+        vec![]
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -75,11 +103,12 @@ impl Model {
 
 impl Module for Model {
     fn forward(&self, input: Tensor) -> Tensor {
+        println!("FORWARD!");
         let mut last_value = input;
         for layer in self.layers.iter() {
             let temp = last_value.clone();
             let (x, y) = temp.size;
-            println!("size: ({}, {})", x, y);
+            println!("{} - size: ({}, {})", layer.get_name(), x, y);
             last_value = layer.forward(last_value);
         }
         last_value
