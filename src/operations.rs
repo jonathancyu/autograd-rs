@@ -177,6 +177,13 @@ impl Differentiable for Tensor {
                 // y = a * b
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * b
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * a
+                //
+                // A [m x n]
+                // B [n x p]
+                // Y    [m x p] = A.B
+                // grad [m x p]
+                // A.grad [m x n] = grad.(B^T) = [m x p].[p x n]
+                // B.grad [n x p] = (A^T).grad = [n x m].[m x p]
                 let a_last = a.last();
                 let b_last = b.last();
                 let (a1, a2) = a_last.size;
@@ -187,7 +194,7 @@ impl Differentiable for Tensor {
                 let a_partial = grad.clone() * b_last.transpose();
                 println!("a_partial: {}", a_partial.clone());
                 a.add_grad(a_partial);
-                let b_partial = (grad.clone() * a_last).transpose();
+                let b_partial = a_last.transpose() * grad.clone();
                 println!("b_partial: {}", b_partial.clone());
                 b.add_grad(b_partial);
                 a.backward();
