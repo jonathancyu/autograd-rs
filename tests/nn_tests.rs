@@ -3,7 +3,7 @@ mod nn_tests {
     use approx::assert_relative_eq;
     use llm_rs::{
         data::TestData,
-        nn::{Linear, Model, Module},
+        nn::{Linear, Model, Module, ReLU},
         operations::Differentiable,
         optimizer::{Optimizer, StochasticGradientDescent},
         tensor::Tensor,
@@ -74,8 +74,10 @@ mod nn_tests {
         let learning_rate = 0.01;
 
         let model = Model::new(vec![
-            Box::new(Linear::new(2, 2)),
-            Box::new(Linear::new(2, 1)),
+            Box::new(Linear::new(2, 4)),
+            Box::new(ReLU {}),
+            Box::new(Linear::new(4, 1)),
+            Box::new(ReLU {}),
         ]);
         let optimizer = StochasticGradientDescent::new(learning_rate, model.parameters());
 

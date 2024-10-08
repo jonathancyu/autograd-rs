@@ -1,12 +1,13 @@
 use std::{
     cell::RefCell,
+    clone,
     ops::{Add, AddAssign, Mul, Neg, Sub, SubAssign},
     rc::Rc,
-    vec,
 };
 
 use crate::tensor::Tensor;
 
+#[derive(Clone)]
 pub struct Gradient {
     pub operation: GradientOperation,
     pub last: Option<Tensor>,
@@ -111,24 +112,32 @@ impl Differentiable for Tensor {
 
     fn add_grad(&self, grad: Tensor) {
         let mut gradient = self.gradient.borrow_mut();
-        let value = gradient
-            .value
-            .clone()
-            .expect("Tensor doesn't have grad enabled");
-        gradient.value = Some(value + grad);
+        if let Some(value) = gradient.value.clone() {
+            gradient.value = Some(value + grad);
+        }
+        // TODO: should this fail silently? I think so, b/c should do nothing with tensors w/o grad
+        // enabled, right?
+        // What if grad isn't enabled but gradients flow through this node?
     }
 
     fn last(&self) -> Tensor {
         let gradient = self.gradient.borrow();
         match &gradient.last {
             Some(value) => value.clone(),
-            None => panic!("Tensor doesn't have last value"),
+            None => self.clone(),
         }
     }
 
     fn backward(&self) {
         let grad = self.grad();
         let gradient = self.gradient.borrow();
+        let g_debug = gradient.clone();
+        println!(
+            "BACKWARD: {:?} \t\t = {}, grad = {}",
+            g_debug.operation,
+            g_debug.last.unwrap(),
+            g_debug.value.unwrap()
+        );
         match &gradient.operation {
             GradientOperation::None => {}
             GradientOperation::Neg(a) => {
@@ -143,8 +152,8 @@ impl Differentiable for Tensor {
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * 1
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * 1
                 a.add_grad(grad.clone());
-                a.backward();
                 b.add_grad(grad.clone());
+                a.backward();
                 b.backward();
                 // println!("{}: {}, {}: {}", a.name, a.grad(), b.name, b.grad());
             }
@@ -153,8 +162,8 @@ impl Differentiable for Tensor {
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * 1
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * -1
                 a.add_grad(grad.clone());
-                a.backward();
                 b.add_grad(-grad.clone());
+                a.backward();
                 b.backward();
                 // println!("{}: {}, {}: {}", a.name, a.grad(), b.name, b.grad());
             }
@@ -162,13 +171,17 @@ impl Differentiable for Tensor {
                 // y = a * b
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * b
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * a
-                let a_last = a.last();
-                let b_last = b.last();
-                a.add_grad(grad.clone() * b_last);
+                let a_last = a.last().transpose();
+                let b_last = b.last().transpose();
+                let (a1, a2) = a_last.size;
+                let (b1, b2) = b_last.size;
+                println!("a_size: {}x{}, b_size: {}x{}", a1, a2, b1, b2);
+                println!("<<<{}", grad.clone());
+                println!(">>>{}: {}\n>>> {}: {}", a.name, a.grad(), b.name, b.grad());
+                a.add_grad(grad.clone() * b_last.transpose());
+                b.add_grad(grad.clone() * a_last.transpose());
                 a.backward();
-                b.add_grad(grad.clone() * a_last);
                 b.backward();
-                // println!("{}: {}, {}: {}", a.name, a.grad(), b.name, b.grad());
             }
             GradientOperation::ReLU(a) => {
                 // y = [ x >= 0: x, x < 0: 0 ]

@@ -29,7 +29,6 @@ fn main() {
             let (x, y) = (sample.input, sample.output);
             let y_pred = &(&*weights * &x) + bias;
             // println!("product: {}", y_pred);
-            let y_pred_temp = &y_pred.clone();
             let loss = &Differentiable::pow(&(y_pred - y.clone()), 2);
             last_loss = loss.clone();
             // println!(
