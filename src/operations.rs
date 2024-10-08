@@ -73,6 +73,7 @@ pub trait Differentiable {
     fn set_grad(&self, grad: Tensor);
     fn reset_grad(&self);
     fn add_grad(&self, grad: Tensor);
+    fn has_grad(&self) -> bool;
 
     fn last(&self) -> Tensor;
 
@@ -126,6 +127,11 @@ impl Differentiable for Tensor {
         // What if grad isn't enabled but gradients flow through this node?
     }
 
+    fn has_grad(&self) -> bool {
+        let gradient = self.gradient.borrow();
+        gradient.value.is_some()
+    }
+
     fn last(&self) -> Tensor {
         let gradient = self.gradient.borrow();
         match &gradient.last {
@@ -135,6 +141,9 @@ impl Differentiable for Tensor {
     }
 
     fn backward(&self) {
+        if !self.has_grad() {
+            return;
+        }
         let grad = self.grad();
         let gradient = self.gradient.borrow();
         let g_debug = gradient.clone();
@@ -178,9 +187,7 @@ impl Differentiable for Tensor {
                 // a.grad = dL/da = (dL/dy)(dy/da) = grad * b
                 // b.grad = dL/db = (dL/dy)(dy/db) = grad * a
                 //
-                // A [m x n]
-                // B [n x p]
-                // Y    [m x p] = A.B
+                // Y    [m x p] = A.B = [m x n].[n x p]
                 // grad [m x p]
                 // A.grad [m x n] = grad.(B^T) = [m x p].[p x n]
                 // B.grad [n x p] = (A^T).grad = [n x m].[m x p]
